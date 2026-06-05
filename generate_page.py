@@ -518,7 +518,8 @@ def enrich(torrents, ratings, basics):
         print(f"  [{i}/{total}] {title}...", end=' ', flush=True)
 
         if imdb_id:
-            genre = basics.get(imdb_id, {}).get('genres', '')
+            bdata = basics.get(imdb_id)
+            genre = bdata.get('genres', '') if isinstance(bdata, dict) else ''
             if not genre:
                 rating_data = fetch_imdb_rating(imdb_id)
                 if rating_data.get('genres'):
@@ -531,10 +532,11 @@ def enrich(torrents, ratings, basics):
                     print(f"IMDB {rating_data['rating']} (scraped)", end='')
             t['genre'] = genre
 
-            if imdb_id in ratings:
-                t['imdb_rating'] = ratings[imdb_id]['rating']
-                t['imdb_votes'] = ratings[imdb_id]['votes']
-                print(f"IMDB {ratings[imdb_id]['rating']}", end='')
+            rdata = ratings.get(imdb_id)
+            if isinstance(rdata, dict):
+                t['imdb_rating'] = rdata['rating']
+                t['imdb_votes'] = rdata['votes']
+                print(f"IMDB {rdata['rating']}", end='')
             elif not t.get('imdb_rating'):
                 print(f"ID {imdb_id} — нет рейтинга", end='')
 
