@@ -113,6 +113,10 @@ hit-movies-tracker/
 └── *cache.txt                    # Хеши, прочий кеш (gitignored)
 ```
 
+## Disclaimer
+
+Проект не предоставляет фильмы, не содержит magnet-ссылки, только метаданные.
+
 ## Стек
 
 - Python 3.10+

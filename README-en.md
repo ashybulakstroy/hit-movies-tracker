@@ -113,6 +113,10 @@ hit-movies-tracker/
 └── *cache.txt                    # Hashes, other cache (gitignored)
 ```
 
+## Disclaimer
+
+This project does not host or provide any movies, does not contain magnet links — only metadata.
+
 ## Tech stack
 
 - Python 3.10+
