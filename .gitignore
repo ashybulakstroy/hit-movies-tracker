@@ -9,6 +9,8 @@ torrents_data.json
 youtube_cache.json
 piratebay_page.html
 posters/
+piratebay_hash.txt
+*.hash.txt
 .vscode/
 .idea/
 *.log

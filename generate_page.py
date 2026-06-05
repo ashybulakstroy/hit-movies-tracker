@@ -68,7 +68,8 @@ def clean_title(raw):
                r'10bit|8bit|5\s*[. ]\s*1|2\s*[. ]\s*0|6CH|'
                r'REPACK|PROPER|READNFO|iNTERNAL|EXTENDED|UNRATED|DC|FINAL|COMPLETE|'
                r'YTS|RARBG|RMTeam|NeoNoir|SupaCvnt|FLUX|BTM|'
-               r'WEBRip|WEB\s*[.-]\s*DL|WEB\s*Line|AMZN|DSNP|NF|MA|PMNTP|PLAY|Early\s*Release'
+               r'WEBRip|WEB\s*[.-]\s*DL|WEB\s*Line|AMZN|DSNP|NF|MA|PMNTP|PLAY|Early\s*Release|'
+               r'CAM|TELESYNC|HDTS|TS|TC|SCREENER'
                r')\b', ' ', t, flags=re.I)
     t = re.sub(r'[._]', ' ', t)
     t = re.sub(r'\s+', ' ', t).strip()
@@ -88,19 +89,21 @@ def search_imdb(title, year):
         items = [it for it in data.get('d', []) if it.get('id', '').startswith('tt')]
         if not items:
             return None
-        best = items[0]
         if year:
-            exact = next((it for it in items if str(it.get('y')) == str(year)), None)
-            if exact:
-                best = exact
-        img = ''
-        img_data = best.get('i')
-        if img_data:
-            if isinstance(img_data, dict):
-                img = img_data.get('imageUrl', '')
-            elif isinstance(img_data, list) and len(img_data) > 0:
-                img = img_data[0].get('imageUrl', '')
-        return {'id': best['id'], 'poster': img, 'cast': best.get('s', '')}
+            items = [it for it in items if str(it.get('y')) == str(year)]
+        if not items:
+            return None
+        def poster_url(it):
+            img_data = it.get('i')
+            if img_data:
+                if isinstance(img_data, dict):
+                    return img_data.get('imageUrl', '')
+                if isinstance(img_data, list) and len(img_data) > 0:
+                    return img_data[0].get('imageUrl', '')
+            return ''
+        items.sort(key=lambda it: (1 if poster_url(it) else 0), reverse=True)
+        best = items[0]
+        return {'id': best['id'], 'poster': poster_url(best), 'cast': best.get('s', '')}
     except Exception:
         return None
 
@@ -183,15 +186,20 @@ def search_imdb_deep(raw_name):
             items = [it for it in data.get('d', []) if it.get('id', '').startswith('tt')]
             if not items:
                 continue
-            # Сначала ищем точное совпадение по году
             if year:
-                exact = next((it for it in items if str(it.get('y')) == str(year)), None)
-                if exact:
-                    return _parse_imdb_result(exact)
-            # Иначе берём первый результат
-            best = items[0]
-            result = _parse_imdb_result(best)
-            return result
+                items = [it for it in items if str(it.get('y')) == str(year)]
+            if not items:
+                continue
+            def poster_url(it):
+                img_data = it.get('i')
+                if img_data:
+                    if isinstance(img_data, dict):
+                        return img_data.get('imageUrl', '')
+                    if isinstance(img_data, list) and len(img_data) > 0:
+                        return img_data[0].get('imageUrl', '')
+                return ''
+            items.sort(key=lambda it: (1 if poster_url(it) else 0), reverse=True)
+            return _parse_imdb_result(items[0])
         except Exception:
             continue
     return None
@@ -439,6 +447,25 @@ def load_basics(needed_ids):
         return {}
 
 
+PAGE_HASH_CACHE = "piratebay_hash.txt"
+
+
+def page_unchanged(html):
+    import hashlib
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, 'html.parser')
+    rows = soup.select('#searchResult tbody tr')
+    content = ''.join(str(r) for r in rows)
+    h = hashlib.sha256(content.encode()).hexdigest()
+    if os.path.exists(PAGE_HASH_CACHE):
+        with open(PAGE_HASH_CACHE, 'r') as f:
+            if f.read().strip() == h:
+                return True
+    with open(PAGE_HASH_CACHE, 'w') as f:
+        f.write(h)
+    return False
+
+
 def load_page(refresh=False):
     if refresh or not os.path.exists(PAGE_CACHE):
         html = fetch(CATEGORY_URL)
@@ -553,6 +580,8 @@ def enrich(torrents, ratings, basics):
 def generate_html(torrents):
     rows = []
     tiles = []
+
+    genre_bar = '<div class="gf"><span class="gl">Жанр:</span><select class="gs" onchange="gf(this.value)" id="gs"><option value="">Все</option></select></div>'
 
     for t in torrents:
         rating = t['imdb_rating'] or '—'
@@ -684,6 +713,9 @@ body.tile .tile-grid{{display:grid}}
 body.tile .st{{display:none}}
 @media(max-width:768px){{body{{padding:10px}}h1{{font-size:22px}}.sub{{font-size:12px}}.tn{{font-size:20px}}.ca{{font-size:18px}}.gn{{font-size:18px}}.ps{{max-width:260px}}td{{padding:8px 10px;font-size:13px}}tr{{padding:6px 0}}.tile-title{{font-size:17px}}.tile-genre,.tile-size,.tile-cast,.tile-imdb{{font-size:14px}}.tile-grid{{grid-template-columns:1fr}}.tps{{max-height:200px;object-fit:cover}}table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}}}
 body.mobile{{padding:10px}}body.mobile h1{{font-size:22px}}body.mobile .sub{{font-size:12px}}body.mobile .tn{{font-size:20px}}body.mobile .ca{{font-size:18px}}body.mobile .gn{{font-size:18px}}body.mobile .ps{{max-width:260px}}body.mobile td{{padding:8px 10px;font-size:13px}}body.mobile tr{{padding:6px 0}}body.mobile .tile-title{{font-size:17px}}body.mobile .tile-genre,body.mobile .tile-size,body.mobile .tile-cast,body.mobile .tile-imdb{{font-size:14px}}body.mobile .tile-grid{{grid-template-columns:1fr}}body.mobile .tps{{max-height:200px;object-fit:cover}}body.mobile table,body.mobile thead,body.mobile tbody,body.mobile tr,body.mobile td,body.mobile th{{display:block}}body.mobile thead{{display:none}}body.tile.mobile table{{display:none}}
+.gf{{display:flex;align-items:center;gap:6px;padding:6px 0;margin-bottom:8px;font-size:18px}}
+.gl{{font-weight:600;color:#555;flex-shrink:0}}
+.gs{{font-size:18px;padding:2px 6px;border:1px solid #ccc;border-radius:4px;max-width:200px}}
 </style>
 </head>
 <body>
@@ -695,6 +727,7 @@ body.mobile{{padding:10px}}body.mobile h1{{font-size:22px}}body.mobile .sub{{fon
 <span class="tv" onclick="tv()" id="tvb">Вид: плитка</span>
 <span class="tv" onclick="md()" id="mdb">📱</span>
 </div>
+{genre_bar}
 
 <table id="tbl">
 <thead><tr>
@@ -723,16 +756,22 @@ r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
 document.querySelectorAll('th .ar').forEach(function(e){{e.textContent=''}});document.querySelectorAll('th')[c].querySelector('.ar').textContent=a>0?'▲':'▼';sortTiles()}}
 function td(el){{var r=el.closest('td').querySelector('.dtc');if(!r)return;var on=r.style.display!=='none';r.style.display=on?'none':'';el.textContent=on?'+':'−'}}
 function pt(el){{var u=el.getAttribute('data-yt');if(!u)return;window.open(u,'tr','width=960,height=540,menubar=no,toolbar=no,location=no')}}
-function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});fh()}}
-function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('.tile-card[data-title="'+t+'"],tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}}
+function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});fh();bgf()}}
+function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('.tile-card[data-title="'+t+'"],tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});bgf()}}
 function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('.tile-card[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
-(function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();sortTiles();
+(function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();bgf();sortTiles();
 var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список';sortTiles()}}
 var isMob=localStorage.getItem('mb')==='1';if(isMob){{document.body.classList.add('mobile');document.getElementById('mdb').textContent='🖥'}}}})()
 function tv(){{var b=document.body;b.classList.toggle('tile');var isTile=b.classList.contains('tile');localStorage.setItem('tv',isTile?'tile':'list');document.getElementById('tvb').textContent=isTile?'Вид: список':'Вид: плитка';if(isTile)sortTiles()}}
 function md(){{var b=document.body;b.classList.toggle('mobile');var isMob=b.classList.contains('mobile');localStorage.setItem('mb',isMob?'1':'0');document.getElementById('mdb').textContent=isMob?'🖥':'📱'}}
+function bgf(){{var gs={{}};[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{if(r.style.display==='none')return;var rg=(r.getAttribute('data-genre')||'').toLowerCase();rg.split(',').forEach(function(g){{g=g.trim();if(g)gs[g]=1}})}});var sel=document.getElementById('gs'),v=sel.value;sel.innerHTML='<option value=\\"\\">Все</option>';Object.keys(gs).sort().forEach(function(g){{var s=g.charAt(0).toUpperCase()+g.slice(1);sel.innerHTML+='<option value=\\"'+g+'\\">'+s+'</option>'}});sel.value=v}}
+function gf(g){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{r.style.display=''}});
+if(g){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var rg=(r.getAttribute('data-genre')||'').toLowerCase();if(rg.indexOf(g)===-1)r.style.display='none'}})}}
+var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
+[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var rg=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(rg)||sx.test(t))r.style.display='none'}});
+fh();fht()}}
 </script>
 </body>
 </html>'''
@@ -741,6 +780,7 @@ function md(){{var b=document.body;b.classList.toggle('mobile');var isMob=b.clas
 
 def main():
     refresh = '--refresh' in sys.argv
+    nocache = '--nocache' in sys.argv
 
     if not refresh and os.path.exists(TORRENTS_CACHE):
         print("Загружаю кеш торрентов...")
@@ -750,81 +790,85 @@ def main():
         print("1. Загружаю Pirate Bay...")
         html = load_page(refresh=True)
 
-        print("2. Парсю торренты...")
-        fresh = parse_torrents(html)
-        print(f"   Найдено: {len(fresh)} торрентов")
-
-        cached = load_json(TORRENTS_CACHE) or []
-        cache_by_url = {t['detail_url']: t for t in cached if t.get('detail_url')}
-        fresh_by_url = {t['detail_url']: t for t in fresh if t.get('detail_url')}
-
-        kept = []
-        new_list = []
-        for url, ft in fresh_by_url.items():
-            if url in cache_by_url:
-                old = cache_by_url[url]
-                old['seeders'] = ft['seeders']
-                old['leechers'] = ft['leechers']
-                old['size'] = ft['size']
-                old['uploaded'] = ft['uploaded']
-                old['uploaded_ts'] = ft['uploaded_ts']
-                kept.append(old)
-            else:
-                new_list.append(ft)
-
-        removed_count = 0
-        for url, ct in cache_by_url.items():
-            if url not in fresh_by_url:
-                imdb_id = ct.get('imdb_id')
-                if imdb_id:
-                    poster_path = f"{POSTERS_DIR}/{imdb_id}.jpg"
-                    if os.path.exists(poster_path):
-                        os.remove(poster_path)
-                        print(f"   Удалён постер: {poster_path}")
-                removed_count += 1
-
-        missing = [t for t in kept if not t.get('imdb_id') or not t.get('imdb_rating')]
-
-        if new_list:
-            print(f"\n3. Новых фильмов: {len(new_list)}. Ищу IMDB ID...")
-            search_imdb_ids(new_list)
-
-        if missing:
-            print(f"\n4. Дозаполняю {len(missing)} фильмов без IMDB...")
-            search_imdb_ids(missing)
-
-        needed_ids = set()
-        for t in kept + new_list:
-            if t.get('imdb_id'):
-                needed_ids.add(t['imdb_id'])
-
-        if needed_ids:
-            print(f"\n5. Загружаю IMDB ratings для {len(needed_ids)} фильмов...")
-            ratings = load_ratings(needed_ids)
-            print(f"   Получено рейтингов: {sum(1 for k in needed_ids if k in ratings)}/{len(needed_ids)}")
-
-            print(f"\n6. Загружаю IMDB basics (жанры) для {len(needed_ids)} фильмов...")
-            basics = load_basics(needed_ids)
-            print(f"   Получено жанров: {sum(1 for k in needed_ids if k in basics)}/{len(needed_ids)}")
+        if not nocache and page_unchanged(html):
+            print("   Список фильмов не изменился. Использую кеш.")
+            torrents = load_json(TORRENTS_CACHE) or []
         else:
-            ratings = {}
-            basics = {}
+            print("2. Парсю торренты...")
+            fresh = parse_torrents(html)
+            print(f"   Найдено: {len(fresh)} торрентов")
 
-        if new_list:
-            print(f"\n7. Обогащаю данные для {len(new_list)} новых фильмов...")
-            enrich(new_list, ratings, basics)
+            cached = load_json(TORRENTS_CACHE) or []
+            cache_by_url = {t['detail_url']: t for t in cached if t.get('detail_url')}
+            fresh_by_url = {t['detail_url']: t for t in fresh if t.get('detail_url')}
 
-        if missing:
-            print(f"\n8. Дозаполняю данные для {len(missing)} фильмов...")
-            enrich(missing, ratings, basics)
+            kept = []
+            new_list = []
+            for url, ft in fresh_by_url.items():
+                if url in cache_by_url:
+                    old = cache_by_url[url]
+                    old['seeders'] = ft['seeders']
+                    old['leechers'] = ft['leechers']
+                    old['size'] = ft['size']
+                    old['uploaded'] = ft['uploaded']
+                    old['uploaded_ts'] = ft['uploaded_ts']
+                    kept.append(old)
+                else:
+                    new_list.append(ft)
 
-        torrents = kept + new_list
-        torrents.sort(key=lambda t: t.get('uploaded_ts', 0) or 0, reverse=True)
+            removed_count = 0
+            for url, ct in cache_by_url.items():
+                if url not in fresh_by_url:
+                    imdb_id = ct.get('imdb_id')
+                    if imdb_id:
+                        poster_path = f"{POSTERS_DIR}/{imdb_id}.jpg"
+                        if os.path.exists(poster_path):
+                            os.remove(poster_path)
+                            print(f"   Удалён постер: {poster_path}")
+                    removed_count += 1
 
-        removed_msg = f", удалено: {removed_count}" if removed_count else ""
-        print(f"   Осталось: {len(torrents)} (новых: {len(new_list)}{removed_msg})")
+            missing = [t for t in kept if not t.get('imdb_id') or not t.get('imdb_rating')]
 
-        save_json(TORRENTS_CACHE, torrents)
+            if new_list:
+                print(f"\n3. Новых фильмов: {len(new_list)}. Ищу IMDB ID...")
+                search_imdb_ids(new_list)
+
+            if missing:
+                print(f"\n4. Дозаполняю {len(missing)} фильмов без IMDB...")
+                search_imdb_ids(missing)
+
+            needed_ids = set()
+            for t in kept + new_list:
+                if t.get('imdb_id'):
+                    needed_ids.add(t['imdb_id'])
+
+            if needed_ids:
+                print(f"\n5. Загружаю IMDB ratings для {len(needed_ids)} фильмов...")
+                ratings = load_ratings(needed_ids)
+                print(f"   Получено рейтингов: {sum(1 for k in needed_ids if k in ratings)}/{len(needed_ids)}")
+
+                print(f"\n6. Загружаю IMDB basics (жанры) для {len(needed_ids)} фильмов...")
+                basics = load_basics(needed_ids)
+                print(f"   Получено жанров: {sum(1 for k in needed_ids if k in basics)}/{len(needed_ids)}")
+            else:
+                ratings = {}
+                basics = {}
+
+            if new_list:
+                print(f"\n7. Обогащаю данные для {len(new_list)} новых фильмов...")
+                enrich(new_list, ratings, basics)
+
+            if missing:
+                print(f"\n8. Дозаполняю данные для {len(missing)} фильмов...")
+                enrich(missing, ratings, basics)
+
+            torrents = kept + new_list
+            torrents.sort(key=lambda t: t.get('uploaded_ts', 0) or 0, reverse=True)
+
+            removed_msg = f", удалено: {removed_count}" if removed_count else ""
+            print(f"   Осталось: {len(torrents)} (новых: {len(new_list)}{removed_msg})")
+
+            save_json(TORRENTS_CACHE, torrents)
 
     print("\n9. Генерирую HTML...")
     output = generate_html(torrents)
