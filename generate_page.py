@@ -681,7 +681,8 @@ td{{padding:12px 16px;font-size:14px;vertical-align:middle}}
 body.tile table{{display:none}}
 body.tile .tile-grid{{display:grid}}
 body.tile .st{{display:none}}
-@media(max-width:768px), body.mobile{{body{{padding:10px}}h1{{font-size:22px}}.sub{{font-size:12px}}.tn{{font-size:20px}}.ca{{font-size:18px}}.gn{{font-size:18px}}.ps{{max-width:260px}}td{{padding:8px 10px;font-size:13px}}tr{{padding:6px 0}}.tile-title{{font-size:17px}}.tile-genre,.tile-size,.tile-cast,.tile-imdb{{font-size:14px}}.tile-grid{{grid-template-columns:1fr}}.tps{{max-height:200px;object-fit:cover}}table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}}}
+@media(max-width:768px){{body{{padding:10px}}h1{{font-size:22px}}.sub{{font-size:12px}}.tn{{font-size:20px}}.ca{{font-size:18px}}.gn{{font-size:18px}}.ps{{max-width:260px}}td{{padding:8px 10px;font-size:13px}}tr{{padding:6px 0}}.tile-title{{font-size:17px}}.tile-genre,.tile-size,.tile-cast,.tile-imdb{{font-size:14px}}.tile-grid{{grid-template-columns:1fr}}.tps{{max-height:200px;object-fit:cover}}table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}}}
+body.mobile{{padding:10px}}body.mobile h1{{font-size:22px}}body.mobile .sub{{font-size:12px}}body.mobile .tn{{font-size:20px}}body.mobile .ca{{font-size:18px}}body.mobile .gn{{font-size:18px}}body.mobile .ps{{max-width:260px}}body.mobile td{{padding:8px 10px;font-size:13px}}body.mobile tr{{padding:6px 0}}body.mobile .tile-title{{font-size:17px}}body.mobile .tile-genre,body.mobile .tile-size,body.mobile .tile-cast,body.mobile .tile-imdb{{font-size:14px}}body.mobile .tile-grid{{grid-template-columns:1fr}}body.mobile .tps{{max-height:200px;object-fit:cover}}body.mobile table,body.mobile thead,body.mobile tbody,body.mobile tr,body.mobile td,body.mobile th{{display:block}}body.mobile thead{{display:none}}
 </style>
 </head>
 <body>
