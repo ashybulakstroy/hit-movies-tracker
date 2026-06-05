@@ -1,0 +1,14 @@
+.venv/
+*.pyc
+__pycache__/
+imdb_ratings_cache.json
+imdb_search_cache.json
+imdb_basics_cache.json
+torrents.html
+torrents_data.json
+youtube_cache.json
+piratebay_page.html
+posters/
+.vscode/
+.idea/
+*.log
