@@ -9,8 +9,8 @@
 | `generate_page.py` | Python-скрипт — скачивает Top 100 HD-Movies с Pirate Bay, обогащает IMDB рейтингом/жанрами/постером и YouTube трейлером, генерирует `torrents.html` |
 | `piratebay-imdb-trailer.user.js` | Tampermonkey-юзерскрипт — добавляет IMDB рейтинг и YouTube трейлер прямо на страницу Pirate Bay |
 | `requirements.txt` | Зависимости Python |
-| `imdb_ratings_cache.json` | Кеш рейтингов (из `title.ratings.tsv.gz`, ~8MB) |
-| `imdb_basics_cache.json` | Кеш жанров (из `title.basics.tsv.gz`, ~8MB) |
+| `imdb_ratings_cache.json` | Кеш рейтингов (только нужные ID, ~50-200KB) |
+| `imdb_basics_cache.json` | Кеш жанров (только нужные ID, ~50-200KB) |
 | `imdb_search_cache.json` | Кеш поиска название→ID + постер + актёры (вечный) |
 | `youtube_cache.json` | Кеш YouTube трейлеров (название→прямая ссылка, вечный) |
 | `piratebay_page.html` | Кеш HTML-страницы Pirate Bay |

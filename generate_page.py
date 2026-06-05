@@ -208,6 +208,56 @@ def _parse_imdb_result(item):
     return {'id': item['id'], 'poster': img, 'cast': item.get('s', '')}
 
 
+def search_imdb_ids(torrents):
+    total = len(torrents)
+    imdb_cache = load_json(SEARCH_CACHE) or {}
+
+    for i, t in enumerate(torrents, 1):
+        title, year = t['movie_title'], t['movie_year']
+        raw_name = t['name']
+        if not title:
+            continue
+        cache_key = f"{title}|{year}".lower()
+
+        result = None
+        if cache_key in imdb_cache and imdb_cache[cache_key] is not None:
+            result = imdb_cache[cache_key]
+        else:
+            print(f"  [{i}/{total}] {title}...", end=' ', flush=True)
+            result = search_imdb(title, year)
+            if result is None:
+                deep_cache_key = f"deep:{raw_name.lower().strip()}"
+                if deep_cache_key in imdb_cache and imdb_cache[deep_cache_key] is not None:
+                    result = imdb_cache[deep_cache_key]
+                else:
+                    result = search_imdb_deep(raw_name)
+                    if result is not None:
+                        imdb_cache[deep_cache_key] = result
+            if result is not None:
+                imdb_cache[cache_key] = result
+                save_json(SEARCH_CACHE, imdb_cache)
+            time.sleep(0.1)
+
+        if result:
+            if isinstance(result, str):
+                imdb_id = result
+                poster, cast = '', ''
+            else:
+                imdb_id = result.get('id')
+                poster = result.get('poster', '')
+                cast = result.get('cast', '')
+            t['imdb_id'] = imdb_id
+            t['poster_url'] = download_poster(imdb_id, poster) if poster else ''
+            t['cast'] = cast
+            print(f"ID {imdb_id}", end='')
+        else:
+            print("не найдено", end='')
+
+        print()
+
+    return torrents
+
+
 def fetch_imdb_rating(imdb_id):
     """Парсит рейтинг, жанр, постер со страницы IMDB для фильмов без рейтинга в датасете."""
     if not imdb_id:
@@ -322,14 +372,17 @@ def parse_pirate_date(raw):
     return 0
 
 
-def load_ratings(refresh=False):
-    cached = load_json(RATINGS_CACHE)
-    if not refresh and cached:
-        return cached
+def load_ratings(needed_ids, refresh=False):
+    cached = load_json(RATINGS_CACHE) or {}
+    if not refresh and cached and needed_ids.issubset(cached.keys()):
+        return {k: v for k, v in cached.items() if k in needed_ids}
     try:
         print("Скачиваю IMDB ratings dataset (~8MB)...")
         r = SESSION.get(RATINGS_URL, stream=True, timeout=120)
         r.raise_for_status()
+        keep_ids = needed_ids
+        if not refresh and cached:
+            keep_ids = set(cached.keys()) | needed_ids
         ratings = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -338,22 +391,31 @@ def load_ratings(refresh=False):
                 for line in f:
                     parts = line.strip().split('\t')
                     if len(parts) >= 3:
-                        ratings[parts[0]] = {'rating': parts[1], 'votes': parts[2]}
+                        tid = parts[0]
+                        if tid in keep_ids:
+                            ratings[tid] = {'rating': parts[1], 'votes': parts[2]}
+        if not refresh and cached:
+            ratings = {**cached, **ratings}
         save_json(RATINGS_CACHE, ratings)
-        return ratings
+        return {k: v for k, v in ratings.items() if k in needed_ids}
     except Exception as e:
         print(f"   Не удалось скачать ratings: {e}")
-        return cached or {}
+        if cached:
+            return {k: v for k, v in cached.items() if k in needed_ids}
+        return {}
 
 
-def load_basics(refresh=False):
-    cached = load_json(BASICS_CACHE)
-    if not refresh and cached:
-        return cached
+def load_basics(needed_ids, refresh=False):
+    cached = load_json(BASICS_CACHE) or {}
+    if not refresh and cached and needed_ids.issubset(cached.keys()):
+        return {k: v for k, v in cached.items() if k in needed_ids}
     try:
         print("Скачиваю IMDB basics dataset (жанры, ~8MB)...")
         r = SESSION.get(BASICS_URL, stream=True, timeout=120)
         r.raise_for_status()
+        keep_ids = needed_ids
+        if not refresh and cached:
+            keep_ids = set(cached.keys()) | needed_ids
         basics = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -364,12 +426,17 @@ def load_basics(refresh=False):
                     if len(parts) >= 9:
                         tid = parts[0]
                         g = parts[8] if parts[8] != r'\N' else ''
-                        basics[tid] = {'type': parts[1], 'genres': g}
+                        if tid in keep_ids:
+                            basics[tid] = {'type': parts[1], 'genres': g}
+        if not refresh and cached:
+            basics = {**cached, **basics}
         save_json(BASICS_CACHE, basics)
-        return basics
+        return {k: v for k, v in basics.items() if k in needed_ids}
     except Exception as e:
         print(f"   Не удалось скачать basics: {e}")
-        return cached or {}
+        if cached:
+            return {k: v for k, v in cached.items() if k in needed_ids}
+        return {}
 
 
 def load_page(refresh=False):
@@ -434,76 +501,38 @@ def parse_torrents(html):
 
 def enrich(torrents, ratings, basics):
     total = len(torrents)
-    imdb_cache = load_json(SEARCH_CACHE) or {}
     yt_cache = load_json(YOUTUBE_CACHE) or {}
 
     for i, t in enumerate(torrents, 1):
         title, year = t['movie_title'], t['movie_year']
-        raw_name = t['name']
         if not title:
             continue
         cache_key = f"{title}|{year}".lower()
-        is_new = False
+        imdb_id = t.get('imdb_id')
 
-        # IMDB — сначала быстрый поиск по очищенному названию
-        result = None
-        if cache_key in imdb_cache and imdb_cache[cache_key] is not None:
-            result = imdb_cache[cache_key]
-        else:
-            print(f"  [{i}/{total}] {title}...", end=' ', flush=True)
-            result = search_imdb(title, year)
-            if result is None:
-                # Fallback: глубокий поиск по сырому названию
-                deep_cache_key = f"deep:{raw_name.lower().strip()}"
-                if deep_cache_key in imdb_cache and imdb_cache[deep_cache_key] is not None:
-                    result = imdb_cache[deep_cache_key]
-                else:
-                    result = search_imdb_deep(raw_name)
-                    if result is not None:
-                        imdb_cache[deep_cache_key] = result
-            if result is not None:
-                imdb_cache[cache_key] = result
-                save_json(SEARCH_CACHE, imdb_cache)
-            time.sleep(0.1)
-            is_new = True
+        print(f"  [{i}/{total}] {title}...", end=' ', flush=True)
 
-        if result:
-            if isinstance(result, str):
-                imdb_id = result
-                poster, cast = '', ''
-            else:
-                imdb_id = result.get('id')
-                poster = result.get('poster', '')
-                cast = result.get('cast', '')
-            t['imdb_id'] = imdb_id
-            t['poster_url'] = download_poster(imdb_id, poster) if poster else ''
-            t['cast'] = cast
-
-            # Жанр: сначала из basics, потом со страницы IMDB
-            genre = basics.get(imdb_id, {}).get('genres', '') if imdb_id else ''
-            if not genre and imdb_id:
+        if imdb_id:
+            genre = basics.get(imdb_id, {}).get('genres', '')
+            if not genre:
                 rating_data = fetch_imdb_rating(imdb_id)
                 if rating_data.get('genres'):
                     genre = rating_data['genres']
-                if not poster and rating_data.get('poster'):
+                if not t.get('poster_url') and rating_data.get('poster'):
                     t['poster_url'] = download_poster(imdb_id, rating_data['poster'])
                 if rating_data.get('rating'):
                     t['imdb_rating'] = rating_data['rating']
                     t['imdb_votes'] = rating_data.get('votes', '')
-                    if is_new:
-                        print(f"IMDB {rating_data['rating']} (scraped)", end='')
+                    print(f"IMDB {rating_data['rating']} (scraped)", end='')
             t['genre'] = genre
 
-            # Рейтинг из датасета
             if imdb_id in ratings:
                 t['imdb_rating'] = ratings[imdb_id]['rating']
                 t['imdb_votes'] = ratings[imdb_id]['votes']
-                if is_new:
-                    print(f"IMDB {ratings[imdb_id]['rating']}", end='')
-            elif is_new and not t.get('imdb_rating'):
+                print(f"IMDB {ratings[imdb_id]['rating']}", end='')
+            elif not t.get('imdb_rating'):
                 print(f"ID {imdb_id} — нет рейтинга", end='')
 
-        # YouTube
         if cache_key in yt_cache:
             t['youtube_url'] = yt_cache[cache_key]
         else:
@@ -512,14 +541,10 @@ def enrich(torrents, ratings, basics):
             yt_cache[cache_key] = yt_url
             save_json(YOUTUBE_CACHE, yt_cache)
             if yt_url:
-                if is_new:
-                    print(f", трейлер ✓", end='')
-                else:
-                    print(f"  [{i}/{total}] {title}... трейлер ✓", end='')
+                print(f", трейлер ✓", end='')
             time.sleep(0.1)
 
-        if is_new:
-            print()
+        print()
 
     return torrents
 
@@ -664,27 +689,17 @@ def main():
         torrents = load_json(TORRENTS_CACHE)
 
     else:
-        print("1. Загружаю IMDB ratings...")
-        ratings = load_ratings()
-        print(f"   Всего в датасете рейтингов: {len(ratings)}")
-
-        print("\n2. Загружаю IMDB basics (жанры)...")
-        basics = load_basics()
-        print(f"   Всего в датасете жанров: {len(basics)}")
-
-        print("\n3. Загружаю Pirate Bay...")
+        print("1. Загружаю Pirate Bay...")
         html = load_page(refresh=True)
 
-        print("4. Парсю торренты...")
+        print("2. Парсю торренты...")
         fresh = parse_torrents(html)
         print(f"   Найдено: {len(fresh)} торрентов")
 
-        # Загружаем кеш
         cached = load_json(TORRENTS_CACHE) or []
         cache_by_url = {t['detail_url']: t for t in cached if t.get('detail_url')}
         fresh_by_url = {t['detail_url']: t for t in fresh if t.get('detail_url')}
 
-        # Обновляем seeders/leechers у существующих
         kept = []
         new_list = []
         for url, ft in fresh_by_url.items():
@@ -699,7 +714,6 @@ def main():
             else:
                 new_list.append(ft)
 
-        # Удаляем пропавшие с сайта
         removed_count = 0
         for url, ct in cache_by_url.items():
             if url not in fresh_by_url:
@@ -711,21 +725,40 @@ def main():
                         print(f"   Удалён постер: {poster_path}")
                 removed_count += 1
 
-        # Обогащаем новые
-        if new_list:
-            print(f"\n5. Новых фильмов: {len(new_list)}. Собираю IMDB/постер/жанр/трейлер...")
-            new_list = enrich(new_list, ratings, basics)
-
-        # Дозаполняем существующие без IMDB
         missing = [t for t in kept if not t.get('imdb_id') or not t.get('imdb_rating')]
+
+        if new_list:
+            print(f"\n3. Новых фильмов: {len(new_list)}. Ищу IMDB ID...")
+            search_imdb_ids(new_list)
+
         if missing:
-            print(f"\n   Дозаполняю {len(missing)} фильмов без данных IMDB...")
-            filled = enrich(missing, ratings, basics)
-            # Переносим обратно в kept
-            filled_by_url = {t['detail_url']: t for t in filled if t.get('detail_url')}
-            for t in kept:
-                if t['detail_url'] in filled_by_url:
-                    t.update(filled_by_url[t['detail_url']])
+            print(f"\n4. Дозаполняю {len(missing)} фильмов без IMDB...")
+            search_imdb_ids(missing)
+
+        needed_ids = set()
+        for t in kept + new_list:
+            if t.get('imdb_id'):
+                needed_ids.add(t['imdb_id'])
+
+        if needed_ids:
+            print(f"\n5. Загружаю IMDB ratings для {len(needed_ids)} фильмов...")
+            ratings = load_ratings(needed_ids, refresh)
+            print(f"   Получено рейтингов: {sum(1 for k in needed_ids if k in ratings)}/{len(needed_ids)}")
+
+            print(f"\n6. Загружаю IMDB basics (жанры) для {len(needed_ids)} фильмов...")
+            basics = load_basics(needed_ids, refresh)
+            print(f"   Получено жанров: {sum(1 for k in needed_ids if k in basics)}/{len(needed_ids)}")
+        else:
+            ratings = {}
+            basics = {}
+
+        if new_list:
+            print(f"\n7. Обогащаю данные для {len(new_list)} новых фильмов...")
+            enrich(new_list, ratings, basics)
+
+        if missing:
+            print(f"\n8. Дозаполняю данные для {len(missing)} фильмов...")
+            enrich(missing, ratings, basics)
 
         torrents = kept + new_list
         torrents.sort(key=lambda t: t.get('uploaded_ts', 0) or 0, reverse=True)
@@ -735,7 +768,7 @@ def main():
 
         save_json(TORRENTS_CACHE, torrents)
 
-    print("\n6. Генерирую HTML...")
+    print("\n9. Генерирую HTML...")
     output = generate_html(torrents)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         f.write(output)
