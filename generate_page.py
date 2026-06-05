@@ -594,13 +594,14 @@ def generate_html(torrents):
         poster_card = f'<div class="pc" data-yt="{escape(trailer_url)}" onclick="pt(this)"><img src="{escape(poster)}" class="tps" alt=""><span class="pb">▶</span></div>' if poster else ''
         cast_short = escape(cast_str)[:120] + '…' if len(cast_str) > 120 else escape(cast_str)
 
-        tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}">
+        tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}" data-size="{esize}">
 {poster_card}
 <div class="tile-body">
 <a href="{escape(t['detail_url'])}" class="tile-title" target="_blank">{escape(t['name'])}</a>
 <div class="tile-info">
 <span class="rb {rating_cls}">IMDB {escape(str(rating))}</span>
 {'' if not genre else f'<span class="tile-genre">{escape(genre)}</span>'}
+<span class="tile-size">{esize}</span>
 </div>
 {'' if not cast_short else f'<div class="tile-cast">{cast_short}</div>'}
 <div class="tile-actions">
@@ -672,6 +673,7 @@ td{{padding:12px 16px;font-size:14px;vertical-align:middle}}
 .tile-title:hover{{text-decoration:underline}}
 .tile-info{{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}}
 .tile-genre{{font-size:18px;color:#888}}
+.tile-size{{font-size:18px;color:#999}}
 .tile-cast{{font-size:18px;color:#555;line-height:1.4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .tile-actions{{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}}
 .tile-imdb{{font-size:18px;color:#555;text-decoration:none}}
@@ -711,7 +713,7 @@ body.tile .st{{display:none}}
 </div>
 <script>
 var sd={{i:-1,d:1}};
-function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else{{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
+function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else if(sd.i===1){{cards.sort(function(x,y){{return a*((x.getAttribute('data-size')||'').localeCompare(y.getAttribute('data-size')||''))}})}}else{{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
 function st(c,t){{var tb=document.querySelector('#tbl tbody'),r=Array.from(tb.children),a=sd.i===c?sd.d*-1:1;
 r.sort(function(x,y){{var va=x.children[c].getAttribute('data-s')||(t==='n'?x.getAttribute('data-date')||'0':x.children[c].textContent.trim()),vb=y.children[c].getAttribute('data-s')||(t==='n'?y.getAttribute('data-date')||'0':y.children[c].textContent.trim());if(t==='n'){{return a*(parseFloat(va)-parseFloat(vb))}}return a*va.localeCompare(vb)}});
 r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
