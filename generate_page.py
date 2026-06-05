@@ -441,7 +441,6 @@ def load_basics(needed_ids, refresh=False):
 
 def load_page(refresh=False):
     if refresh or not os.path.exists(PAGE_CACHE):
-        print(f"Загружаю Pirate Bay...")
         html = fetch(CATEGORY_URL)
         with open(PAGE_CACHE, 'w', encoding='utf-8') as f:
             f.write(html)
