@@ -7,12 +7,16 @@ Generates an HTML page of the Top 100 HD movies from Pirate Bay, enriched with I
 - Fetches the current Top 100 HD-Movies from Pirate Bay
 - Looks up each movie on IMDB: rating, genre, poster, cast
 - Searches YouTube for a trailer and links directly to the video
-- Generates a clean, sortable HTML page with date sorting
+- Two view modes: **list** (table) and **tile** (cards)
+- Toggle button: **"View: tiles/list"**
+- Mobile preview button: **📱/🖥** — forces mobile styles on desktop
+- Click-to-sort on all column headers: **Title**, **Size**, **Date**, **Rating** — synced across both views
 - Semi-transparent ▶ play button over the poster for trailer preview
 - Expandable details: poster, genre, rating, cast
 - Auto-filters out horror and adult content
-- ✕ button to hide a movie and all its duplicates
+- ✕ to hide a movie and all its duplicates (no confirmation)
 - Full caching — re-generation takes ~0.2 sec
+- Incremental IMDB cache: only stores IDs seen in TPB (~50-200KB instead of 1GB)
 - Sync: new movies are added, removed ones are cleaned up
 
 ## Setup
@@ -63,8 +67,8 @@ python server.py
 
 | File | Purpose |
 |------|---------|
-| `imdb_ratings_cache.json` | IMDB ratings (from dataset, ~8MB) |
-| `imdb_basics_cache.json` | IMDB genres (from dataset, ~8MB) |
+| `imdb_ratings_cache.json` | IMDB ratings (only needed IDs, ~50-200KB) |
+| `imdb_basics_cache.json` | IMDB genres (only needed IDs, ~50-200KB) |
 | `imdb_search_cache.json` | Search results title→ID + poster + cast |
 | `youtube_cache.json` | YouTube trailer links |
 | `piratebay_page.html` | Snapshot of the Pirate Bay page |
@@ -78,11 +82,13 @@ On re-run without `--refresh`, all data is served from cache — generation take
 ```
 hit-movies-tracker/
 ├── generate_page.py              # Main generation script
-├── server.py                     # HTTP server with refresh button
+├── server.py                     # HTTP server with 🔄 refresh button
 ├── torrents.html                 # Generated page (gitignored)
 ├── requirements.txt              # Dependencies
 ├── posters/                      # Posters (gitignored)
 ├── *cache.json                   # Cache files (gitignored)
+├── README.md                     # Documentation (Russian)
+├── README-en.md                  # Documentation (English)
 └── piratebay-imdb-trailer.user.js  # Tampermonkey userscript
 ```
 
