@@ -551,6 +551,7 @@ def enrich(torrents, ratings, basics):
 
 def generate_html(torrents):
     rows = []
+    tiles = []
 
     for t in torrents:
         rating = t['imdb_rating'] or '—'
@@ -572,6 +573,7 @@ def generate_html(torrents):
         poster_html = f'<div class="pc" data-yt="{escape(trailer_url)}" onclick="pt(this)"><img src="{escape(poster)}" class="ps" alt=""><span class="pb">▶</span></div>' if poster else ''
         cast_html = f'<p class="ca">{escape(cast_str)}</p>' if cast_str else ''
         genre_html = f'<p class="gn">{escape(genre)}</p>' if genre else ''
+        esize = escape(t['size'])
 
         rows.append(f'''<tr data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}">
 <td><a href="{escape(t['detail_url'])}" class="tn" target="_blank">{escape(t['name'])}</a>
@@ -584,10 +586,31 @@ def generate_html(torrents):
 </div>
 <div class="dtc" style="display:none"><div class="dc">{poster_html}<div class="dx">{genre_html}<div class="rbi"><span class="rb {rating_cls}">IMDB {escape(str(rating))}{escape(votes_str)}</span></div>{cast_html}</div></div></div>
 </td>
-<td>{escape(t['size'])}</td>
+<td>{esize}</td>
 <td>{escape(t['uploaded'])}</td>
 <td><a href="{escape(t['magnet'])}" class="bm">🧲</a></td>
 </tr>''')
+
+        poster_card = f'<div class="pc" data-yt="{escape(trailer_url)}" onclick="pt(this)"><img src="{escape(poster)}" class="tps" alt=""><span class="pb">▶</span></div>' if poster else ''
+        cast_short = escape(cast_str)[:120] + '…' if len(cast_str) > 120 else escape(cast_str)
+
+        tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}">
+{poster_card}
+<div class="tile-body">
+<a href="{escape(t['detail_url'])}" class="tile-title" target="_blank">{escape(t['name'])}</a>
+<div class="tile-info">
+<span class="rb {rating_cls}">IMDB {escape(str(rating))}</span>
+{'' if not genre else f'<span class="tile-genre">{escape(genre)}</span>'}
+</div>
+{'' if not cast_short else f'<div class="tile-cast">{cast_short}</div>'}
+<div class="tile-actions">
+<a href="{trailer_url}" onclick="window.open(this.href,'tr','width=960,height=540,menubar=no,toolbar=no,location=no');return false" class="bt">▶ Трейлер</a>
+<a href="{escape(t['magnet'])}" class="bm">🧲</a>
+<a href="{imdb_url}" target="_blank" class="tile-imdb">IMDB</a>
+<span class="rmv" onclick="htm(this)">✕</span>
+</div>
+</div>
+</div>''')
 
     with_r = sum(1 for t in torrents if t['imdb_rating'])
 
@@ -604,6 +627,8 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 h1{{font-size:28px;margin-bottom:4px;color:#1a1a1a}}
 .sub{{color:#666;margin-bottom:20px;font-size:13px}}
 .sub a{{color:#1a73e8}}
+.sub .tv{{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;color:#fff;background:#1a73e8;border-radius:4px;cursor:pointer;user-select:none;margin-left:8px;border:none;vertical-align:middle}}
+.sub .tv:hover{{background:#1557b0}}
 table{{width:100%;border-collapse:collapse}}
 th{{position:sticky;top:0;background:#f5f5f5;padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#666;border-bottom:2px solid #e0e0e0;cursor:pointer;user-select:none}}
 th:hover{{background:#e8e8e8}}
@@ -638,17 +663,33 @@ td{{padding:12px 16px;font-size:14px;vertical-align:middle}}
 .rmv:hover{{background:#b62324}}
 .bm{{font-size:16px;text-decoration:none;color:#333}}
 .st{{margin:16px 0;padding:12px 16px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;border:1px solid #e0e0e0}}
-@media(max-width:768px){{table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}td{{padding:6px 10px}}tr{{padding:10px 0}}}}
+.tile-grid{{display:none;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}}
+.tile-card{{border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;transition:box-shadow .2s}}
+.tile-card:hover{{box-shadow:0 2px 12px rgba(0,0,0,.1)}}
+.tps{{width:100%;display:block;border-radius:0}}
+.tile-body{{padding:8px 10px}}
+.tile-title{{font-size:20px;font-weight:600;color:#1a73e8;text-decoration:none;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;margin-bottom:4px}}
+.tile-title:hover{{text-decoration:underline}}
+.tile-info{{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}}
+.tile-genre{{font-size:18px;color:#888}}
+.tile-cast{{font-size:18px;color:#555;line-height:1.4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.tile-actions{{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}}
+.tile-imdb{{font-size:18px;color:#555;text-decoration:none}}
+.tile-imdb:hover{{text-decoration:underline}}
+body.tile table{{display:none}}
+body.tile .tile-grid{{display:grid}}
+body.tile .st{{display:none}}
+@media(max-width:768px){{table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}td{{padding:6px 10px}}tr{{padding:10px 0}}.tile-grid{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
 <div class="c">
-<h1>🎬 HD-Movies Top 100 + IMDB</h1>
-<p class="sub">
-Источник: <a href="{escape(CATEGORY_URL)}" target="_blank">{escape(CATEGORY_URL)}</a>
+<div class="sub">
+<span>Источник: <a href="{escape(CATEGORY_URL)}" target="_blank">{escape(CATEGORY_URL)}</a>
 • Всего: <strong>{len(torrents)}</strong> торрентов
-• С рейтингом: <strong>{with_r}</strong>
-</p>
+• С рейтингом: <strong>{with_r}</strong></span>
+<span class="tv" onclick="tv()" id="tvb">Вид: плитка</span>
+</div>
 
 <table id="tbl">
 <thead><tr>
@@ -661,6 +702,11 @@ td{{padding:12px 16px;font-size:14px;vertical-align:middle}}
 {chr(10).join(rows)}
 </tbody>
 </table>
+
+<div class="tile-grid" id="tile-grid">
+{chr(10).join(tiles)}
+</div>
+
 <p class="st">✕ — скрыть фильм и все одноимённые. Кликните на «Дата» для сортировки. Очистить скрытые: очистите localStorage.</p>
 </div>
 <script>
@@ -672,9 +718,13 @@ document.querySelectorAll('th .ar').forEach(function(e){{e.textContent=''}});doc
 function td(el){{var r=el.closest('td').querySelector('.dtc');if(!r)return;var on=r.style.display!=='none';r.style.display=on?'none':'';el.textContent=on?'+':'−'}}
 function pt(el){{var u=el.getAttribute('data-yt');if(!u)return;window.open(u,'tr','width=960,height=540,menubar=no,toolbar=no,location=no')}}
 function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t||!confirm('Скрыть все торренты \\u0022'+t+'\\u0022?'))return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});fh()}}
+function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!t||!confirm('Скрыть все торренты \\u0022'+t+'\\u0022?'))return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('.tile-card[data-title="'+t+'"],tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}}
 function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
+function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('.tile-card[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
-(function(){{var trs=document.querySelectorAll('#tbl tbody tr');trs.forEach(function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh()}})()
+(function(){{var trs=document.querySelectorAll('#tbl tbody tr');trs.forEach(function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();
+var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список'}}}})()
+function tv(){{var b=document.body;b.classList.toggle('tile');var isTile=b.classList.contains('tile');localStorage.setItem('tv',isTile?'tile':'list');document.getElementById('tvb').textContent=isTile?'Вид: список':'Вид: плитка'}}
 </script>
 </body>
 </html>'''

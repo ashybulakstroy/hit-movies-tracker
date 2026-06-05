@@ -33,7 +33,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         html = index_path.read_text('utf-8')
         # Вставляем кнопку обновления после строки с rating
         button = '<a class="rf" href="/refresh" title="Обновить данные с Pirate Bay" style="font-size:14px;margin-left:8px;text-decoration:none;cursor:pointer">🔄</a>'
-        html = html.replace('</p>', f' {button}</p>', 1)
+        html = html.replace('</span>', f'{button}</span>', 1)
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Cache-Control', 'no-cache')
