@@ -681,7 +681,7 @@ td{{padding:12px 16px;font-size:14px;vertical-align:middle}}
 body.tile table{{display:none}}
 body.tile .tile-grid{{display:grid}}
 body.tile .st{{display:none}}
-@media(max-width:768px){{table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}td{{padding:6px 10px}}tr{{padding:10px 0}}.tile-grid{{grid-template-columns:1fr}}}}
+@media(max-width:768px), body.mobile{{body{{padding:10px}}h1{{font-size:22px}}.sub{{font-size:12px}}.tn{{font-size:20px}}.ca{{font-size:18px}}.gn{{font-size:18px}}.ps{{max-width:260px}}td{{padding:8px 10px;font-size:13px}}tr{{padding:6px 0}}.tile-title{{font-size:17px}}.tile-genre,.tile-size,.tile-cast,.tile-imdb{{font-size:14px}}.tile-grid{{grid-template-columns:1fr}}.tps{{max-height:200px;object-fit:cover}}table,thead,tbody,tr,td,th{{display:block}}thead{{display:none}}}}
 </style>
 </head>
 <body>
@@ -691,6 +691,7 @@ body.tile .st{{display:none}}
 • Всего: <strong>{len(torrents)}</strong> торрентов
 • С рейтингом: <strong>{with_r}</strong></span>
 <span class="tv" onclick="tv()" id="tvb">Вид: плитка</span>
+<span class="tv" onclick="md()" id="mdb">📱</span>
 </div>
 
 <table id="tbl">
@@ -726,8 +727,10 @@ function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(func
 function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('.tile-card[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
 (function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();sortTiles();
-var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список';sortTiles()}}}})()
+var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список';sortTiles()}}
+var isMob=localStorage.getItem('mb')==='1';if(isMob){{document.body.classList.add('mobile');document.getElementById('mdb').textContent='🖥'}}}})()
 function tv(){{var b=document.body;b.classList.toggle('tile');var isTile=b.classList.contains('tile');localStorage.setItem('tv',isTile?'tile':'list');document.getElementById('tvb').textContent=isTile?'Вид: список':'Вид: плитка';if(isTile)sortTiles()}}
+function md(){{var b=document.body;b.classList.toggle('mobile');var isMob=b.classList.contains('mobile');localStorage.setItem('mb',isMob?'1':'0');document.getElementById('mdb').textContent=isMob?'🖥':'📱'}}
 </script>
 </body>
 </html>'''
