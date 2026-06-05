@@ -588,13 +588,13 @@ def generate_html(torrents):
 </td>
 <td>{esize}</td>
 <td>{escape(t['uploaded'])}</td>
-<td><a href="{escape(t['magnet'])}" class="bm">🧲</a></td>
+<td data-s="{t['imdb_rating'] or '0'}"><a href="{escape(t['magnet'])}" class="bm">🧲</a></td>
 </tr>''')
 
         poster_card = f'<div class="pc" data-yt="{escape(trailer_url)}" onclick="pt(this)"><img src="{escape(poster)}" class="tps" alt=""><span class="pb">▶</span></div>' if poster else ''
         cast_short = escape(cast_str)[:120] + '…' if len(cast_str) > 120 else escape(cast_str)
 
-        tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}" data-size="{esize}">
+        tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}" data-size="{esize}" data-rating="{t['imdb_rating'] or '0'}">
 {poster_card}
 <div class="tile-body">
 <a href="{escape(t['detail_url'])}" class="tile-title" target="_blank">{escape(t['name'])}</a>
@@ -698,7 +698,7 @@ body.tile .st{{display:none}}
 <th onclick="st(0,'f')">Название <span class="ar"></span></th>
 <th onclick="st(1,'f')">Размер <span class="ar"></span></th>
 <th onclick="st(2,'n')">Дата <span class="ar"></span></th>
-<th>Скачать</th>
+<th onclick="st(3,'n')">Рейтинг <span class="ar"></span></th>
 </tr></thead>
 <tbody>
 {chr(10).join(rows)}
@@ -709,11 +709,11 @@ body.tile .st{{display:none}}
 {chr(10).join(tiles)}
 </div>
 
-<p class="st">✕ — скрыть фильм и все одноимённые. Кликните на «Дата» для сортировки. Очистить скрытые: очистите localStorage.</p>
+<p class="st">✕ — скрыть фильм и все одноимённые. Кликните на заголовки для сортировки. Очистить скрытые: очистите localStorage.</p>
 </div>
 <script>
 var sd={{i:-1,d:1}};
-function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else if(sd.i===1){{cards.sort(function(x,y){{return a*((x.getAttribute('data-size')||'').localeCompare(y.getAttribute('data-size')||''))}})}}else{{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
+function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else if(sd.i===1){{cards.sort(function(x,y){{return a*((x.getAttribute('data-size')||'').localeCompare(y.getAttribute('data-size')||''))}})}}else if(sd.i===3){{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-rating')||'0')-parseFloat(y.getAttribute('data-rating')||'0'))}})}}else{{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
 function st(c,t){{var tb=document.querySelector('#tbl tbody'),r=Array.from(tb.children),a=sd.i===c?sd.d*-1:1;
 r.sort(function(x,y){{var va=x.children[c].getAttribute('data-s')||(t==='n'?x.getAttribute('data-date')||'0':x.children[c].textContent.trim()),vb=y.children[c].getAttribute('data-s')||(t==='n'?y.getAttribute('data-date')||'0':y.children[c].textContent.trim());if(t==='n'){{return a*(parseFloat(va)-parseFloat(vb))}}return a*va.localeCompare(vb)}});
 r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
