@@ -394,10 +394,13 @@ def load_ratings(needed_ids, refresh=False):
                         tid = parts[0]
                         if tid in keep_ids:
                             ratings[tid] = {'rating': parts[1], 'votes': parts[2]}
+        for tid in keep_ids:
+            if tid not in ratings:
+                ratings[tid] = None
         if not refresh and cached:
             ratings = {**cached, **ratings}
         save_json(RATINGS_CACHE, ratings)
-        return {k: v for k, v in ratings.items() if k in needed_ids}
+        return {k: v for k, v in ratings.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать ratings: {e}")
         if cached:
@@ -428,10 +431,13 @@ def load_basics(needed_ids, refresh=False):
                         g = parts[8] if parts[8] != r'\N' else ''
                         if tid in keep_ids:
                             basics[tid] = {'type': parts[1], 'genres': g}
+        for tid in keep_ids:
+            if tid not in basics:
+                basics[tid] = None
         if not refresh and cached:
             basics = {**cached, **basics}
         save_json(BASICS_CACHE, basics)
-        return {k: v for k, v in basics.items() if k in needed_ids}
+        return {k: v for k, v in basics.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать basics: {e}")
         if cached:
