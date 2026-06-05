@@ -711,10 +711,11 @@ body.tile .st{{display:none}}
 </div>
 <script>
 var sd={{i:-1,d:1}};
+function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else if(sd.i===2||sd.i===-1){{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
 function st(c,t){{var tb=document.querySelector('#tbl tbody'),r=Array.from(tb.children),a=sd.i===c?sd.d*-1:1;
 r.sort(function(x,y){{var va=x.children[c].getAttribute('data-s')||(t==='n'?x.getAttribute('data-date')||'0':x.children[c].textContent.trim()),vb=y.children[c].getAttribute('data-s')||(t==='n'?y.getAttribute('data-date')||'0':y.children[c].textContent.trim());if(t==='n'){{return a*(parseFloat(va)-parseFloat(vb))}}return a*va.localeCompare(vb)}});
 r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
-document.querySelectorAll('th .ar').forEach(function(e){{e.textContent=''}});document.querySelectorAll('th')[c].querySelector('.ar').textContent=a>0?'▲':'▼'}}
+document.querySelectorAll('th .ar').forEach(function(e){{e.textContent=''}});document.querySelectorAll('th')[c].querySelector('.ar').textContent=a>0?'▲':'▼';sortTiles()}}
 function td(el){{var r=el.closest('td').querySelector('.dtc');if(!r)return;var on=r.style.display!=='none';r.style.display=on?'none':'';el.textContent=on?'+':'−'}}
 function pt(el){{var u=el.getAttribute('data-yt');if(!u)return;window.open(u,'tr','width=960,height=540,menubar=no,toolbar=no,location=no')}}
 function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});fh()}}
@@ -722,9 +723,9 @@ function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!
 function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('.tile-card[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
 var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
-(function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();
-var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список'}}}})()
-function tv(){{var b=document.body;b.classList.toggle('tile');var isTile=b.classList.contains('tile');localStorage.setItem('tv',isTile?'tile':'list');document.getElementById('tvb').textContent=isTile?'Вид: список':'Вид: плитка'}}
+(function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();sortTiles();
+var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список';sortTiles()}}}})()
+function tv(){{var b=document.body;b.classList.toggle('tile');var isTile=b.classList.contains('tile');localStorage.setItem('tv',isTile?'tile':'list');document.getElementById('tvb').textContent=isTile?'Вид: список':'Вид: плитка';if(isTile)sortTiles()}}
 </script>
 </body>
 </html>'''
