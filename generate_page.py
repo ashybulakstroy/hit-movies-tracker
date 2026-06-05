@@ -711,7 +711,7 @@ body.tile .st{{display:none}}
 </div>
 <script>
 var sd={{i:-1,d:1}};
-function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else if(sd.i===2||sd.i===-1){{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
+function sortTiles(){{var tg=document.getElementById('tile-grid'),cards=Array.from(tg.children),a=sd.d;if(sd.i===0){{cards.sort(function(x,y){{return a*((x.getAttribute('data-title')||'').localeCompare(y.getAttribute('data-title')||''))}})}}else{{cards.sort(function(x,y){{return a*(parseFloat(x.getAttribute('data-date')||'0')-parseFloat(y.getAttribute('data-date')||'0'))}})}}cards.forEach(function(c){{tg.appendChild(c)}})}}
 function st(c,t){{var tb=document.querySelector('#tbl tbody'),r=Array.from(tb.children),a=sd.i===c?sd.d*-1:1;
 r.sort(function(x,y){{var va=x.children[c].getAttribute('data-s')||(t==='n'?x.getAttribute('data-date')||'0':x.children[c].textContent.trim()),vb=y.children[c].getAttribute('data-s')||(t==='n'?y.getAttribute('data-date')||'0':y.children[c].textContent.trim());if(t==='n'){{return a*(parseFloat(va)-parseFloat(vb))}}return a*va.localeCompare(vb)}});
 r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
