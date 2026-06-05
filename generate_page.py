@@ -372,17 +372,15 @@ def parse_pirate_date(raw):
     return 0
 
 
-def load_ratings(needed_ids, refresh=False):
+def load_ratings(needed_ids):
     cached = load_json(RATINGS_CACHE) or {}
-    if not refresh and cached and needed_ids.issubset(cached.keys()):
-        return {k: v for k, v in cached.items() if k in needed_ids}
+    if cached and needed_ids.issubset(cached.keys()):
+        return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
     try:
         print("Скачиваю IMDB ratings dataset (~8MB)...")
         r = SESSION.get(RATINGS_URL, stream=True, timeout=120)
         r.raise_for_status()
-        keep_ids = needed_ids
-        if not refresh and cached:
-            keep_ids = set(cached.keys()) | needed_ids
+        keep_ids = set(cached.keys()) | needed_ids
         ratings = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -397,28 +395,25 @@ def load_ratings(needed_ids, refresh=False):
         for tid in keep_ids:
             if tid not in ratings:
                 ratings[tid] = None
-        if not refresh and cached:
-            ratings = {**cached, **ratings}
+        ratings = {**cached, **ratings}
         save_json(RATINGS_CACHE, ratings)
         return {k: v for k, v in ratings.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать ratings: {e}")
         if cached:
-            return {k: v for k, v in cached.items() if k in needed_ids}
+            return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
         return {}
 
 
-def load_basics(needed_ids, refresh=False):
+def load_basics(needed_ids):
     cached = load_json(BASICS_CACHE) or {}
-    if not refresh and cached and needed_ids.issubset(cached.keys()):
-        return {k: v for k, v in cached.items() if k in needed_ids}
+    if cached and needed_ids.issubset(cached.keys()):
+        return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
     try:
         print("Скачиваю IMDB basics dataset (жанры, ~8MB)...")
         r = SESSION.get(BASICS_URL, stream=True, timeout=120)
         r.raise_for_status()
-        keep_ids = needed_ids
-        if not refresh and cached:
-            keep_ids = set(cached.keys()) | needed_ids
+        keep_ids = set(cached.keys()) | needed_ids
         basics = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -434,14 +429,13 @@ def load_basics(needed_ids, refresh=False):
         for tid in keep_ids:
             if tid not in basics:
                 basics[tid] = None
-        if not refresh and cached:
-            basics = {**cached, **basics}
+        basics = {**cached, **basics}
         save_json(BASICS_CACHE, basics)
         return {k: v for k, v in basics.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать basics: {e}")
         if cached:
-            return {k: v for k, v in cached.items() if k in needed_ids}
+            return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
         return {}
 
 
@@ -806,11 +800,11 @@ def main():
 
         if needed_ids:
             print(f"\n5. Загружаю IMDB ratings для {len(needed_ids)} фильмов...")
-            ratings = load_ratings(needed_ids, refresh)
+            ratings = load_ratings(needed_ids)
             print(f"   Получено рейтингов: {sum(1 for k in needed_ids if k in ratings)}/{len(needed_ids)}")
 
             print(f"\n6. Загружаю IMDB basics (жанры) для {len(needed_ids)} фильмов...")
-            basics = load_basics(needed_ids, refresh)
+            basics = load_basics(needed_ids)
             print(f"   Получено жанров: {sum(1 for k in needed_ids if k in basics)}/{len(needed_ids)}")
         else:
             ratings = {}
