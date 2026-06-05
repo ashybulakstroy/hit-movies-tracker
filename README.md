@@ -1,4 +1,4 @@
-# hitmovies-tracker
+# hit-movies-tracker
 
 Генератор HTML-страницы топ-100 HD-фильмов с Pirate Bay, обогащённой рейтингом IMDB, жанрами, постерами и ссылками на YouTube-трейлеры.
 
@@ -18,8 +18,8 @@
 ## Установка
 
 ```powershell
-git clone https://github.com/ваш-username/hitmovies-tracker.git
-cd hitmovies-tracker
+git clone https://github.com/ваш-username/hit-movies-tracker.git
+cd hit-movies-tracker
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -76,7 +76,7 @@ python server.py
 ## Структура проекта
 
 ```
-hitmovies-tracker/
+hit-movies-tracker/
 ├── generate_page.py          # Основной скрипт генерации
 ├── server.py                 # HTTP-сервер с кнопкой обновления
 ├── torrents.html             # Сгенерированная страница (в gitignore)

@@ -1,4 +1,4 @@
-# hitmovies-tracker
+# hit-movies-tracker
 
 Generates an HTML page of the Top 100 HD movies from Pirate Bay, enriched with IMDB ratings, genres, posters, and YouTube trailer links. No API keys required.
 
@@ -18,8 +18,8 @@ Generates an HTML page of the Top 100 HD movies from Pirate Bay, enriched with I
 ## Setup
 
 ```powershell
-git clone https://github.com/ваш-username/hitmovies-tracker.git
-cd hitmovies-tracker
+git clone https://github.com/ваш-username/hit-movies-tracker.git
+cd hit-movies-tracker
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -76,7 +76,7 @@ On re-run without `--refresh`, all data is served from cache — generation take
 ## Project structure
 
 ```
-hitmovies-tracker/
+hit-movies-tracker/
 ├── generate_page.py              # Main generation script
 ├── server.py                     # HTTP server with refresh button
 ├── torrents.html                 # Generated page (gitignored)
