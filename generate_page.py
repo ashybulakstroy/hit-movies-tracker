@@ -583,13 +583,38 @@ SOURCES['piratebay']['parse'] = parse_piratebay
 SOURCES['tpbparty']['parse'] = parse_tpbparty
 
 
+def levenshtein(a, b):
+    m, n = len(a), len(b)
+    if m < n:
+        a, b = b, a
+        m, n = n, m
+    prev = list(range(n + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(curr[-1] + 1, prev[j + 1] + 1, prev[j] + (ca != cb)))
+        prev = curr
+    return prev[n]
+
+
 def deduplicate(torrents):
-    seen = set()
+    seen_exact = set()
+    seen_fuzzy = []
     result = []
     for t in torrents:
-        key = (t['movie_title'].lower().strip(), t['movie_year'])
-        if key not in seen:
-            seen.add(key)
+        title = t['movie_title'].lower().strip()
+        year = t['movie_year']
+        key = (title, year)
+        if key in seen_exact:
+            continue
+        seen_exact.add(key)
+        is_fdup = False
+        for f_title, f_year, _ in seen_fuzzy:
+            if f_year == year and levenshtein(title, f_title) <= 2:
+                is_fdup = True
+                break
+        if not is_fdup:
+            seen_fuzzy.append((title, year, len(result)))
             result.append(t)
     return result
 

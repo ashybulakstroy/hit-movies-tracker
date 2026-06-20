@@ -11,6 +11,7 @@ youtube_cache.json
 posters/
 *.hash.txt
 *.hash.txt
+last_source.txt
 .vscode/
 .idea/
 *.log
