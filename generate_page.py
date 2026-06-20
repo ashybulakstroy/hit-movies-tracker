@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Генерирует HTML-страницу с торрентами, рейтингом IMDB и ссылками на трейлеры."""
 
+import argparse
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -15,16 +17,13 @@ from html import escape
 import requests
 from bs4 import BeautifulSoup
 
-CATEGORY_URL = "https://1.piratebays.to/top/207"
 RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
 BASICS_URL = "https://datasets.imdbws.com/title.basics.tsv.gz"
-PAGE_CACHE = "piratebay_page.html"
 RATINGS_CACHE = "imdb_ratings_cache.json"
 BASICS_CACHE = "imdb_basics_cache.json"
 SEARCH_CACHE = "imdb_search_cache.json"
 YOUTUBE_CACHE = "youtube_cache.json"
 OUTPUT_FILE = "torrents.html"
-TORRENTS_CACHE = "torrents_data.json"
 POSTERS_DIR = "posters"
 
 HEADERS = {
@@ -32,6 +31,25 @@ HEADERS = {
 }
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
+
+SOURCES = {
+    'piratebay': {
+        'name': 'Pirate Bay',
+        'url': 'https://1.piratebays.to/top/207',
+        'page_cache': 'piratebay_page.html',
+        'torrents_cache': 'torrents_data.json',
+        'hash_cache': 'piratebay_hash.txt',
+        'parse': None,
+    },
+    'tpbparty': {
+        'name': 'TPB Party',
+        'url': 'https://tpb.party/top/207',
+        'page_cache': 'tpbparty_page.html',
+        'torrents_cache': 'torrents_data_tpbparty.json',
+        'hash_cache': 'tpbparty_hash.txt',
+        'parse': None,
+    },
+}
 
 
 def fetch(url):
@@ -56,26 +74,36 @@ def save_json(path, data):
 def clean_title(raw):
     t = raw.strip()
     t = re.sub(r'^tt\d+\s*', '', t)
+    t = re.sub(r'^[a-fA-F0-9]{32,40}\s+', '', t)
     t = re.sub(r'\s*\[.*?\]', '', t)
-    # Год в скобках или просто четырёхзначный год
     year_m = re.search(r'\((\d{4})\)', t) or re.search(r'\b(19\d{2}|20\d{2})\b', t)
     year = year_m.group(1) if year_m else ''
     t = re.sub(r'\s*\(\d{4}\)\s*', ' ', t)
     t = re.sub(r'\(.*?\)', ' ', t)
     t = re.sub(r'\[.*?\]', ' ', t)
     t = re.sub(r'(?i)\b(1080p|720p|2160p|480p|WEBRip|WEB-DL|WEB|BluRay|BRRip|HDRip|DVDRip|DCPRip|'
-               r'x264|x265|h264|h265|HEVC|AVC|AAC|AC3|DDP|DTS|MP4|MKV|AVI|'
-               r'10bit|8bit|5\s*[. ]\s*1|2\s*[. ]\s*0|6CH|'
+               r'x\.?264|x\.?265|h\.?264|h\.?265|HEVC|AVC|'
+               r'MP4|MKV|AVI|'
+               r'10bits|10bit|8bit|6CH|7CH|'
                r'REPACK|PROPER|READNFO|iNTERNAL|EXTENDED|UNRATED|DC|FINAL|COMPLETE|'
-               r'YTS|RARBG|RMTeam|NeoNoir|SupaCvnt|FLUX|BTM|'
+               r'YTS|YIFY|RARBG|RMTeam|NeoNoir|SupaCvnt|FLUX|BTM|BONE|SCOPE|FaS|YG|'
                r'WEBRip|WEB\s*[.-]\s*DL|WEB\s*Line|AMZN|DSNP|NF|MA|PMNTP|PLAY|Early\s*Release|'
-               r'CAM|TELESYNC|HDTS|TS|TC|SCREENER'
+               r'CAM|TELESYNC|HDTS|TS|TC|SCREENER|'
+               r'LINE|Atmos|VOSTFR|MULTi|DUAL|UNiON|FS|BYNDR|Rapta|SyncUP|Asiimov|GalaxyRG|'
+               r'Line\s*Audio|IMAX'
                r')\b', ' ', t, flags=re.I)
+    t = re.sub(r'(?i)(AAC|AC3|DDP|DTS|H[._ -]?\s*264)', ' ', t, flags=re.I)
     t = re.sub(r'[._]', ' ', t)
     t = re.sub(r'\s+', ' ', t).strip()
     t = re.sub(r'\s*-\s*\w+$', '', t)
     t = re.sub(r'\s*[─╌-]\s*\w+$', '', t)
+    t = re.sub(r'(?i)\b(5\s*[. ]\s*1|2\s*[. ]\s*0)\b', ' ', t, flags=re.I)
     t = re.sub(r'(?i)\b(LEAK|PLAY|DUAL|LINKS|SCREENER|TS|CAM|HDRip)\b', '', t)
+    t = re.sub(r'[⭐★☆\-—─╌●•·⭐★]', ' ', t)
+    t = re.sub(r'\s+', ' ', t).strip()
+    if year:
+        t = re.sub(r'\s*' + year + r'\s*$', '', t)
+        t = re.sub(r'\s*' + year + r'\s*$', '', t)
     t = re.sub(r'\s+', ' ', t).strip()
     return t, year
 
@@ -111,17 +139,13 @@ def search_imdb(title, year):
 def clean_title_deep(raw):
     """Агрессивная очистка названия: удаляет всё, кроме имени и года."""
     t = raw.strip()
-    # Удаляем хеши/ID в начале
     t = re.sub(r'^[a-fA-F0-9]{32,40}\s+', '', t)
     t = re.sub(r'^tt\d+\s*', '', t)
     t = re.sub(r'\[.*?\]', '', t)
     t = re.sub(r'\(.*?\)', '', t)
-    # Удаляем расширения и технические теги
     t = re.sub(r'(?i)\.(mp4|mkv|avi|m4v|webm|ts|m2ts)', ' ', t)
     t = re.sub(r'[._]', ' ', t)
-    # Удаляем группы релизов в конце после - (тире)
     t = re.sub(r'\s*-\s*\S+$', '', t)
-    # Удаляем качество, кодеки, источники
     t = re.sub(r'(?i)\b(1080p|720p|2160p|480p|WEBRip|WEB-DL|WEB|BluRay|BRRip|HDRip|DVDRip|'
                r'DCPRip|HDTS|HDRip|CAM|TS|TC|TELESYNC|'
                r'x264|x265|h264|h265|HEVC|AVC|AAC|AC3|DDP|DTS|MP4|MKV|AVI|'
@@ -135,22 +159,16 @@ def clean_title_deep(raw):
                r'HDTS|TELESYNC|VOSTFR|MULTi|DUAL|'
                r'10bits|YTS|YIFY|RARBG|RMTeam|NeoNoir)'
                r'\s*', ' ', t, flags=re.I)
-    # Удаляем звёздочки и эмодзи
     t = re.sub(r'[⭐★☆\-—─╌●•·]', ' ', t)
-    # Удаляем слова до года и после
     year_m = re.search(r'\b(19\d{2}|20\d{2})\b', t)
     year = year_m.group(1) if year_m else ''
-    # Если есть год — берём всё до года + год
     if year:
         idx = t.find(year)
         before = t[:idx].strip()
-        # Оставляем только 2-3 значимых слова до года
         words = before.split()
-        # Если много слов, оставляем только значащие (не слишком короткие)
         before = ' '.join(words)
         t = f'{before} {year}'
     else:
-        # Если нет года — берём первые 4 слова
         words = [w for w in t.split() if len(w) > 1]
         t = ' '.join(words[:4])
     t = re.sub(r'\s+', ' ', t).strip()
@@ -161,20 +179,15 @@ def search_imdb_deep(raw_name):
     """Расширенный поиск IMDB: несколько попыток с разной очисткой названия."""
     title, year = clean_title_deep(raw_name)
     queries = [title]
-
-    # Варианты: без года, короче
     if year:
         queries.append(title.replace(f' {year}', '').strip())
-    # Если название длинное — пробуем первую половину
     words = title.split()
     if len(words) > 4:
         queries.append(' '.join(words[:3]))
         if year:
             queries.append(f'{" ".join(words[:3])} {year}')
-    # Если название всё ещё не короткое — пробуем первые 2 слова
     if len(words) > 5:
         queries.append(' '.join(words[:2]))
-
     for q in queries:
         if not q:
             continue
@@ -219,14 +232,12 @@ def _parse_imdb_result(item):
 def search_imdb_ids(torrents):
     total = len(torrents)
     imdb_cache = load_json(SEARCH_CACHE) or {}
-
     for i, t in enumerate(torrents, 1):
         title, year = t['movie_title'], t['movie_year']
         raw_name = t['name']
         if not title:
             continue
         cache_key = f"{title}|{year}".lower()
-
         result = None
         if cache_key in imdb_cache and imdb_cache[cache_key] is not None:
             result = imdb_cache[cache_key]
@@ -245,7 +256,6 @@ def search_imdb_ids(torrents):
                 imdb_cache[cache_key] = result
                 save_json(SEARCH_CACHE, imdb_cache)
             time.sleep(0.1)
-
         if result:
             if isinstance(result, str):
                 imdb_id = result
@@ -260,9 +270,7 @@ def search_imdb_ids(torrents):
             print(f"ID {imdb_id}", end='')
         else:
             print("не найдено", end='')
-
         print()
-
     return torrents
 
 
@@ -280,19 +288,15 @@ def fetch_imdb_rating(imdb_id):
             return {}
         html = r.text
         result = {}
-        # Рейтинг
         m = re.search(r'"ratingValue"\s*:\s*"([\d.]+)"', html)
         if m:
             result['rating'] = m.group(1)
-        # Количество голосов
         m = re.search(r'"ratingCount"\s*:\s*(\d+)', html)
         if m:
             result['votes'] = m.group(1)
-        # Жанры
         genres = re.findall(r'"genre"\s*:\s*"([^"]+)"', html)
         if genres:
             result['genres'] = ','.join(genres)
-        # Постер
         m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
         if m:
             result['poster'] = m.group(1)
@@ -336,34 +340,24 @@ def download_poster(imdb_id, url):
 def parse_pirate_date(raw):
     now = datetime.now(timezone.utc)
     raw = raw.strip()
-
-    # YYYY-MM-DD HH:MM
     m = re.match(r'^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})', raw)
     if m:
         dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
                       int(m.group(4)), int(m.group(5)), tzinfo=timezone.utc)
         return dt.timestamp()
-
-    # Today HH:MM
     m = re.match(r'^(?:Today|Сегодня)\s+(\d{1,2}):(\d{2})', raw)
     if m:
         dt = now.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
         return dt.timestamp()
-
-    # Y-day / Yesterday / Вчера HH:MM
     m = re.match(r'^(?:Y[- ]?day|Yesterday|Вчера)\s+(\d{1,2}):(\d{2})', raw)
     if m:
         dt = (now - timedelta(days=1)).replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
         return dt.timestamp()
-
-    # MM-DD HH:MM (current year)
     m = re.match(r'^(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})', raw)
     if m:
         dt = datetime(now.year, int(m.group(1)), int(m.group(2)),
                       int(m.group(3)), int(m.group(4)), tzinfo=timezone.utc)
         return dt.timestamp()
-
-    # X mins/hours/days ago
     m = re.match(r'(\d+)\s+(min|mins|minute|minutes)', raw)
     if m:
         return (now - timedelta(minutes=int(m.group(1)))).timestamp()
@@ -376,7 +370,22 @@ def parse_pirate_date(raw):
     m = re.match(r'(\d+)\s+(week|weeks)', raw)
     if m:
         return (now - timedelta(weeks=int(m.group(1)))).timestamp()
+    return 0
 
+
+def parse_tpbparty_date(raw):
+    now = datetime.now(timezone.utc)
+    raw = raw.strip()
+    m = re.match(r'^(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})', raw)
+    if m:
+        dt = datetime(now.year, int(m.group(1)), int(m.group(2)),
+                      int(m.group(3)), int(m.group(4)), tzinfo=timezone.utc)
+        return dt.timestamp()
+    m = re.match(r'^(\d{2})-(\d{2})\s+(\d{4})', raw)
+    if m:
+        dt = datetime(int(m.group(3)), int(m.group(1)), int(m.group(2)),
+                      0, 0, tzinfo=timezone.utc)
+        return dt.timestamp()
     return 0
 
 
@@ -447,36 +456,33 @@ def load_basics(needed_ids):
         return {}
 
 
-PAGE_HASH_CACHE = "piratebay_hash.txt"
-
-
-def page_unchanged(html):
-    import hashlib
-    from bs4 import BeautifulSoup
+def page_unchanged(html, source_key):
+    cfg = SOURCES[source_key]
     soup = BeautifulSoup(html, 'html.parser')
-    rows = soup.select('#searchResult tbody tr')
+    rows = soup.select('#searchResult tbody tr') or soup.select('#searchResult > tr:not(.header)')
     content = ''.join(str(r) for r in rows)
     h = hashlib.sha256(content.encode()).hexdigest()
-    if os.path.exists(PAGE_HASH_CACHE):
-        with open(PAGE_HASH_CACHE, 'r') as f:
+    if os.path.exists(cfg['hash_cache']):
+        with open(cfg['hash_cache'], 'r') as f:
             if f.read().strip() == h:
                 return True
-    with open(PAGE_HASH_CACHE, 'w') as f:
+    with open(cfg['hash_cache'], 'w') as f:
         f.write(h)
     return False
 
 
-def load_page(refresh=False):
-    if refresh or not os.path.exists(PAGE_CACHE):
-        html = fetch(CATEGORY_URL)
-        with open(PAGE_CACHE, 'w', encoding='utf-8') as f:
+def load_page(source_key, refresh=False):
+    cfg = SOURCES[source_key]
+    if refresh or not os.path.exists(cfg['page_cache']):
+        html = fetch(cfg['url'])
+        with open(cfg['page_cache'], 'w', encoding='utf-8') as f:
             f.write(html)
         return html
-    with open(PAGE_CACHE, 'r', encoding='utf-8') as f:
+    with open(cfg['page_cache'], 'r', encoding='utf-8') as f:
         return f.read()
 
 
-def parse_torrents(html):
+def parse_piratebay(html):
     soup = BeautifulSoup(html, 'html.parser')
     torrents = []
     rows = soup.select('#searchResult tbody tr')
@@ -498,9 +504,7 @@ def parse_torrents(html):
         magnet = magnet_el['href'] if magnet_el else ''
         detail_el = row.select_one('a.detLink')
         detail_url = 'https://1.piratebays.to' + detail_el['href'] if detail_el and detail_el.get('href') else ''
-
         movie_title, movie_year = clean_title(name)
-
         torrents.append({
             'name': name,
             'movie_title': movie_title,
@@ -525,19 +529,81 @@ def parse_torrents(html):
     return torrents
 
 
+def parse_tpbparty(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    torrents = []
+    rows = soup.select('#searchResult > tr:not(.header):not(.altHeader)')
+    for row in rows:
+        tds = row.find_all('td')
+        if len(tds) < 8:
+            continue
+        cat_el = row.select_one('.vertTh a')
+        category = cat_el.get_text(strip=True) if cat_el else ''
+        name_el = tds[1].find('a') if len(tds) > 1 else None
+        if not name_el:
+            continue
+        name = name_el.get_text(strip=True)
+        href = name_el.get('href', '')
+        detail_url = f'https://tpb.party{href}' if href else ''
+        uploaded = tds[2].get_text(strip=True) if len(tds) > 2 else ''
+        magnet_el = row.select_one('a[href^="magnet:"]')
+        magnet = magnet_el['href'] if magnet_el else ''
+        size_el = tds[4] if len(tds) > 4 else None
+        size = size_el.get_text(strip=True) if size_el else ''
+        seeders = tds[5].get_text(strip=True) if len(tds) > 5 else '0'
+        leechers = tds[6].get_text(strip=True) if len(tds) > 6 else '0'
+        uploader_el = tds[7].find('a') if len(tds) > 7 else None
+        uploader = uploader_el.get_text(strip=True) if uploader_el else 'Anonymous'
+        movie_title, movie_year = clean_title(name)
+        torrents.append({
+            'name': name,
+            'movie_title': movie_title,
+            'movie_year': movie_year,
+            'category': category,
+            'uploaded': uploaded,
+            'uploaded_ts': parse_tpbparty_date(uploaded),
+            'size': size,
+            'seeders': int(seeders.replace(',', '') or 0),
+            'leechers': int(leechers.replace(',', '') or 0),
+            'uploader': uploader,
+            'magnet': magnet,
+            'detail_url': detail_url,
+            'imdb_id': None,
+            'imdb_rating': None,
+            'imdb_votes': None,
+            'genre': '',
+            'poster_url': '',
+            'cast': '',
+            'youtube_url': None,
+        })
+    return torrents
+
+
+SOURCES['piratebay']['parse'] = parse_piratebay
+SOURCES['tpbparty']['parse'] = parse_tpbparty
+
+
+def deduplicate(torrents):
+    seen = set()
+    result = []
+    for t in torrents:
+        key = (t['movie_title'].lower().strip(), t['movie_year'])
+        if key not in seen:
+            seen.add(key)
+            result.append(t)
+    return result
+
+
 def enrich(torrents, ratings, basics):
     total = len(torrents)
     yt_cache = load_json(YOUTUBE_CACHE) or {}
-
     for i, t in enumerate(torrents, 1):
         title, year = t['movie_title'], t['movie_year']
         if not title:
             continue
         cache_key = f"{title}|{year}".lower()
         imdb_id = t.get('imdb_id')
-
         print(f"  [{i}/{total}] {title}...", end=' ', flush=True)
-
         if imdb_id:
             bdata = basics.get(imdb_id)
             genre = bdata.get('genres', '') if isinstance(bdata, dict) else ''
@@ -552,7 +618,6 @@ def enrich(torrents, ratings, basics):
                     t['imdb_votes'] = rating_data.get('votes', '')
                     print(f"IMDB {rating_data['rating']} (scraped)", end='')
             t['genre'] = genre
-
             rdata = ratings.get(imdb_id)
             if isinstance(rdata, dict):
                 t['imdb_rating'] = rdata['rating']
@@ -560,7 +625,6 @@ def enrich(torrents, ratings, basics):
                 print(f"IMDB {rdata['rating']}", end='')
             elif not t.get('imdb_rating'):
                 print(f"ID {imdb_id} — нет рейтинга", end='')
-
         if cache_key in yt_cache:
             t['youtube_url'] = yt_cache[cache_key]
         else:
@@ -571,18 +635,15 @@ def enrich(torrents, ratings, basics):
             if yt_url:
                 print(f", трейлер ✓", end='')
             time.sleep(0.1)
-
         print()
-
     return torrents
 
 
-def generate_html(torrents):
+def generate_html(torrents, source_key):
     rows = []
     tiles = []
-
+    source_cfg = SOURCES[source_key]
     genre_bar = '<div class="gf"><span class="gl">Жанр:</span><select class="gs" onchange="gf(this.value)" id="gs"><option value="">Все</option></select></div>'
-
     for t in torrents:
         rating = t['imdb_rating'] or '—'
         rating_cls = ''
@@ -596,7 +657,6 @@ def generate_html(torrents):
         votes_title = f' title="{t["imdb_votes"]} голосов"' if t['imdb_votes'] else ''
         date_ts = t.get('uploaded_ts', 0)
         clean_t = escape(t['movie_title'].lower().strip())
-
         poster = t.get('poster_url', '') or ''
         cast_str = t.get('cast', '') or ''
         genre = t.get('genre', '') or ''
@@ -604,7 +664,6 @@ def generate_html(torrents):
         cast_html = f'<p class="ca">{escape(cast_str)}</p>' if cast_str else ''
         genre_html = f'<p class="gn">{escape(genre)}</p>' if genre else ''
         esize = escape(t['size'])
-
         rows.append(f'''<tr data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}">
 <td><a href="{escape(t['detail_url'])}" class="tn" target="_blank">{escape(t['name'])}</a>
 <div class="ml">
@@ -620,10 +679,8 @@ def generate_html(torrents):
 <td>{escape(t['uploaded'])}</td>
 <td data-s="{t['imdb_rating'] or '0'}"><a href="{escape(t['magnet'])}" class="bm">🧲</a></td>
 </tr>''')
-
         poster_card = f'<div class="pc" data-yt="{escape(trailer_url)}" onclick="pt(this)"><img src="{escape(poster)}" class="tps" alt=""><span class="pb">▶</span></div>' if poster else ''
         cast_short = escape(cast_str)[:120] + '…' if len(cast_str) > 120 else escape(cast_str)
-
         tiles.append(f'''<div class="tile-card" data-date="{date_ts}" data-title="{clean_t}" data-genre="{escape(genre.lower())}" data-size="{esize}" data-rating="{t['imdb_rating'] or '0'}">
 {poster_card}
 <div class="tile-body">
@@ -642,9 +699,11 @@ def generate_html(torrents):
 </div>
 </div>
 </div>''')
-
     with_r = sum(1 for t in torrents if t['imdb_rating'])
-
+    source_buttons = ''
+    for sk, sc in SOURCES.items():
+        active_class = ' sba' if sk == source_key else ''
+        source_buttons += f'<a href="?source={sk}" class="sb{active_class}">{escape(sc["name"])}</a>'
     html = f'''<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -658,8 +717,14 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 h1{{font-size:28px;margin-bottom:4px;color:#1a1a1a}}
 .sub{{color:#666;margin-bottom:20px;font-size:13px}}
 .sub a{{color:#1a73e8}}
+.sb{{display:inline-block;padding:5px 14px;font-size:12px;font-weight:600;border-radius:6px;text-decoration:none;color:#1a73e8;border:1.5px solid #1a73e8;background:transparent;margin-right:6px}}
+.sb:hover{{background:#e8f0fe}}
+.sba{{background:#1a73e8;color:#fff;border-color:#1a73e8}}
+.sba:hover{{background:#1557b0}}
 .sub .tv{{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;color:#fff;background:#1a73e8;border-radius:4px;cursor:pointer;user-select:none;margin-left:8px;border:none;vertical-align:middle}}
 .sub .tv:hover{{background:#1557b0}}
+.sub .si{{display:inline-block;margin:0 6px;color:#ccc}}
+.sub .sc{{display:inline-flex;align-items:center;gap:4px}}
 table{{width:100%;border-collapse:collapse}}
 th{{position:sticky;top:0;background:#f5f5f5;padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#666;border-bottom:2px solid #e0e0e0;cursor:pointer;user-select:none}}
 th:hover{{background:#e8e8e8}}
@@ -721,14 +786,18 @@ body.mobile{{padding:10px}}body.mobile h1{{font-size:22px}}body.mobile .sub{{fon
 <body>
 <div class="c">
 <div class="sub">
-<span>Источник: <a href="{escape(CATEGORY_URL)}" target="_blank">{escape(CATEGORY_URL)}</a>
-• Всего: <strong>{len(torrents)}</strong> торрентов
-• С рейтингом: <strong>{with_r}</strong></span>
+<div class="sc">
+{source_buttons}
+</div>
+<div style="margin-top:6px">
+<span>Всего: <strong>{len(torrents)}</strong> торрентов
+• С рейтингом: <strong>{with_r}</strong>
+• <a href="{escape(source_cfg['url'])}" target="_blank">Источник</a></span>
 <span class="tv" onclick="tv()" id="tvb">Вид: плитка</span>
 <span class="tv" onclick="md()" id="mdb">📱</span>
 </div>
+</div>
 {genre_bar}
-
 <table id="tbl">
 <thead><tr>
 <th onclick="st(0,'f')">Название <span class="ar"></span></th>
@@ -740,11 +809,9 @@ body.mobile{{padding:10px}}body.mobile h1{{font-size:22px}}body.mobile .sub{{fon
 {chr(10).join(rows)}
 </tbody>
 </table>
-
 <div class="tile-grid" id="tile-grid">
 {chr(10).join(tiles)}
 </div>
-
 <p class="st">✕ — скрыть фильм и все одноимённые. Кликните на заголовки для сортировки. Очистить скрытые: очистите localStorage.</p>
 </div>
 <script>
@@ -779,29 +846,39 @@ fh();fht()}}
 
 
 def main():
-    refresh = '--refresh' in sys.argv
-    nocache = '--nocache' in sys.argv
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    parser = argparse.ArgumentParser(description='Генератор HTML-страницы торрентов с IMDB рейтингом')
+    parser.add_argument('--source', default='piratebay', choices=list(SOURCES.keys()),
+                        help='Источник фильмов (piratebay или tpbparty)')
+    parser.add_argument('--refresh', action='store_true',
+                        help='Принудительно загрузить страницу источника')
+    parser.add_argument('--nocache', action='store_true',
+                        help='Не использовать кеш страницы источника')
+    args = parser.parse_args()
 
-    if not refresh and os.path.exists(TORRENTS_CACHE):
-        print("Загружаю кеш торрентов...")
-        torrents = load_json(TORRENTS_CACHE)
+    source_key = args.source
+    cfg = SOURCES[source_key]
+    refresh = args.refresh
+    nocache = args.nocache
 
+    if not refresh and os.path.exists(cfg['torrents_cache']):
+        print(f"Загружаю кеш торрентов ({source_key})...")
+        torrents = load_json(cfg['torrents_cache'])
     else:
-        print("1. Загружаю Pirate Bay...")
-        html = load_page(refresh=True)
-
-        if not nocache and page_unchanged(html):
+        print(f"1. Загружаю {cfg['name']}...")
+        html = load_page(source_key, refresh=True)
+        if not nocache and page_unchanged(html, source_key):
             print("   Список фильмов не изменился. Использую кеш.")
-            torrents = load_json(TORRENTS_CACHE) or []
+            torrents = load_json(cfg['torrents_cache']) or []
         else:
             print("2. Парсю торренты...")
-            fresh = parse_torrents(html)
+            fresh = cfg['parse'](html)
             print(f"   Найдено: {len(fresh)} торрентов")
-
-            cached = load_json(TORRENTS_CACHE) or []
+            fresh = deduplicate(fresh)
+            print(f"   После удаления дубликатов: {len(fresh)} торрентов")
+            cached = load_json(cfg['torrents_cache']) or []
             cache_by_url = {t['detail_url']: t for t in cached if t.get('detail_url')}
             fresh_by_url = {t['detail_url']: t for t in fresh if t.get('detail_url')}
-
             kept = []
             new_list = []
             for url, ft in fresh_by_url.items():
@@ -815,7 +892,6 @@ def main():
                     kept.append(old)
                 else:
                     new_list.append(ft)
-
             removed_count = 0
             for url, ct in cache_by_url.items():
                 if url not in fresh_by_url:
@@ -826,56 +902,43 @@ def main():
                             os.remove(poster_path)
                             print(f"   Удалён постер: {poster_path}")
                     removed_count += 1
-
             missing = [t for t in kept if not t.get('imdb_id') or not t.get('imdb_rating')]
-
             if new_list:
                 print(f"\n3. Новых фильмов: {len(new_list)}. Ищу IMDB ID...")
                 search_imdb_ids(new_list)
-
             if missing:
                 print(f"\n4. Дозаполняю {len(missing)} фильмов без IMDB...")
                 search_imdb_ids(missing)
-
             needed_ids = set()
             for t in kept + new_list:
                 if t.get('imdb_id'):
                     needed_ids.add(t['imdb_id'])
-
             if needed_ids:
                 print(f"\n5. Загружаю IMDB ratings для {len(needed_ids)} фильмов...")
                 ratings = load_ratings(needed_ids)
                 print(f"   Получено рейтингов: {sum(1 for k in needed_ids if k in ratings)}/{len(needed_ids)}")
-
                 print(f"\n6. Загружаю IMDB basics (жанры) для {len(needed_ids)} фильмов...")
                 basics = load_basics(needed_ids)
                 print(f"   Получено жанров: {sum(1 for k in needed_ids if k in basics)}/{len(needed_ids)}")
             else:
                 ratings = {}
                 basics = {}
-
             if new_list:
                 print(f"\n7. Обогащаю данные для {len(new_list)} новых фильмов...")
                 enrich(new_list, ratings, basics)
-
             if missing:
                 print(f"\n8. Дозаполняю данные для {len(missing)} фильмов...")
                 enrich(missing, ratings, basics)
-
             torrents = kept + new_list
             torrents.sort(key=lambda t: t.get('uploaded_ts', 0) or 0, reverse=True)
-
             removed_msg = f", удалено: {removed_count}" if removed_count else ""
             print(f"   Осталось: {len(torrents)} (новых: {len(new_list)}{removed_msg})")
-
-            save_json(TORRENTS_CACHE, torrents)
-
-    print("\n9. Генерирую HTML...")
-    output = generate_html(torrents)
+            save_json(cfg['torrents_cache'], torrents)
+    print(f"\n9. Генерирую HTML...")
+    output = generate_html(torrents, source_key)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         f.write(output)
-
-    print(f"\n✅ Готово: {OUTPUT_FILE}")
+    print(f"\n✅ Готово: {OUTPUT_FILE} (источник: {cfg['name']})")
     print(f"   Открой файл в браузере.")
 
 

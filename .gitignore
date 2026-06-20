@@ -5,11 +5,11 @@ imdb_ratings_cache.json
 imdb_search_cache.json
 imdb_basics_cache.json
 torrents.html
-torrents_data.json
+torrents_data*.json
 youtube_cache.json
-piratebay_page.html
+*page.html
 posters/
-piratebay_hash.txt
+*.hash.txt
 *.hash.txt
 .vscode/
 .idea/
