@@ -12,7 +12,7 @@ import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
-from html import escape
+from html import escape, unescape
 
 import requests
 from bs4 import BeautifulSoup
@@ -309,14 +309,108 @@ def fetch_imdb_rating(imdb_id):
         return {}
 
 
-def search_youtube_trailer(title, year):
-    query = f"{title} {year} official trailer"
-    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+def normalize_text(value):
+    return re.sub(r'[^a-z0-9]+', ' ', (value or '').lower()).strip()
+
+
+def title_tokens(title):
+    stop_words = {'the', 'and', 'for', 'with', 'from', 'movie', 'film'}
+    return [w for w in normalize_text(title).split() if len(w) >= 3 and w not in stop_words]
+
+
+def youtube_video_id(url):
+    if not url:
+        return ''
+    m = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
+    return m.group(1) if m else ''
+
+
+def youtube_oembed(video_url):
+    oembed_url = 'https://www.youtube.com/oembed?format=json&url=' + urllib.parse.quote(video_url, safe='')
+    r = SESSION.get(oembed_url, timeout=8)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
+def score_trailer_candidate(meta, movie_title, movie_year):
+    video_title = normalize_text(unescape(meta.get('title', '')))
+    author = normalize_text(meta.get('author_name', ''))
+    tokens = title_tokens(movie_title)
+    if not tokens or not all(token in video_title for token in tokens):
+        return 0
+
+    bad_words = (
+        'review', 'reaction', 'explained', 'ending', 'clip', 'scene', 'song',
+        'soundtrack', 'interview', 'behind the scenes', 'news', 'real paramount',
+    )
+    if any(word in video_title for word in bad_words):
+        return 0
+
+    score = len(tokens) * 2
+    if 'official trailer' in video_title:
+        score += 8
+    elif 'trailer' in video_title:
+        score += 5
+    else:
+        return 0
+
+    if movie_year and str(movie_year) in video_title:
+        score += 2
+    author_words = set(author.split())
+    if author_words & {'distribution', 'pictures', 'studios', 'films'}:
+        score += 5
+    elif author_words & {'trailer', 'trailers', 'media'}:
+        score += 1
+    return score
+
+
+def is_verified_youtube_trailer(url, title, year):
     try:
-        r = SESSION.get(url, timeout=10)
-        m = re.search(r'/watch\?v=([a-zA-Z0-9_-]{11})', r.text)
-        if m:
-            return f"https://www.youtube.com/watch?v={m.group(1)}"
+        meta = youtube_oembed(url)
+        return bool(meta and score_trailer_candidate(meta, title, year) > 0)
+    except Exception:
+        return False
+
+
+def search_youtube_trailer(title, year):
+    queries = [
+        f"{title} official trailer",
+        f"{title} official trailer {year}",
+        f"{title} {year} official trailer",
+        f"{title} trailer",
+    ]
+    try:
+        ids = []
+        for query in queries:
+            url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+            r = SESSION.get(url, timeout=10)
+            for pattern in (r'/watch\?v=([a-zA-Z0-9_-]{11})', r'"videoId":"([a-zA-Z0-9_-]{11})"'):
+                for video_id in re.findall(pattern, r.text):
+                    if video_id not in ids:
+                        ids.append(video_id)
+                    if len(ids) >= 24:
+                        break
+                if len(ids) >= 24:
+                    break
+            if len(ids) >= 24:
+                break
+        best = None
+        best_score = 0
+        for video_id in ids:
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            try:
+                meta = youtube_oembed(video_url)
+            except Exception:
+                continue
+            if not meta:
+                continue
+            score = score_trailer_candidate(meta, title, year)
+            if score > best_score:
+                best = video_url
+                best_score = score
+        if best:
+            return best
     except Exception:
         pass
     return None
@@ -679,15 +773,20 @@ def enrich(torrents, ratings, basics):
                 print(f"IMDB {rdata['rating']}", end='')
             elif not t.get('imdb_rating'):
                 print(f"ID {imdb_id} — нет рейтинга", end='')
-        if cache_key in yt_cache:
-            t['youtube_url'] = yt_cache[cache_key]
+        cached_yt = yt_cache.get(cache_key)
+        if cached_yt and is_verified_youtube_trailer(cached_yt, title, year):
+            t['youtube_url'] = cached_yt
         else:
+            if cached_yt:
+                print(", трейлер в кеше не прошёл проверку", end='')
             yt_url = search_youtube_trailer(title, year)
             t['youtube_url'] = yt_url
             yt_cache[cache_key] = yt_url
             save_json(YOUTUBE_CACHE, yt_cache)
             if yt_url:
                 print(f", трейлер ✓", end='')
+            else:
+                print(f", трейлер не найден", end='')
             time.sleep(0.1)
         print()
     return torrents
