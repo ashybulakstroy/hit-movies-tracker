@@ -9,17 +9,17 @@
 | `generate_page.py` | Python-скрипт — скачивает Top 100 HD-Movies с выбранного источника, обогащает IMDB рейтингом/жанрами/постером и YouTube трейлером, генерирует `torrents.html` |
 | `piratebay-imdb-trailer.user.js` | Tampermonkey-юзерскрипт — добавляет IMDB рейтинг и YouTube трейлер прямо на страницу Pirate Bay |
 | `requirements.txt` | Зависимости Python |
-| `imdb_ratings_cache.json` | Кеш рейтингов (только нужные ID, ~50-200KB) |
-| `imdb_basics_cache.json` | Кеш жанров (только нужные ID, ~50-200KB) |
-| `imdb_search_cache.json` | Кеш поиска название→ID + постер + актёры (вечный) |
-| `youtube_cache.json` | Кеш YouTube трейлеров (название→прямая ссылка, вечный) |
-| `piratebay_page.html` | Кеш HTML-страницы Pirate Bay (источник `piratebay`) |
-| `torrents_data.json` | Кеш обогащённых данных по торрентам (источник `piratebay`) |
-| `tpbparty_page.html` | Кеш HTML-страницы TPB Party (источник `tpbparty`) |
-| `torrents_data_tpbparty.json` | Кеш обогащённых данных по торрентам (источник `tpbparty`) |
+| `data/imdb_ratings_cache.json` | Кеш рейтингов (только нужные ID, ~50-200KB) |
+| `data/imdb_basics_cache.json` | Кеш жанров (только нужные ID, ~50-200KB) |
+| `data/imdb_search_cache.json` | Кеш поиска название→ID + постер + актёры (вечный) |
+| `data/youtube_cache.json` | Кеш YouTube трейлеров (название→прямая ссылка, вечный) |
+| `data/piratebay_page.html` | Кеш HTML-страницы Pirate Bay (источник `piratebay`) |
+| `data/torrents_data.json` | Кеш обогащённых данных по торрентам (источник `piratebay`) |
+| `data/tpbparty_page.html` | Кеш HTML-страницы TPB Party (источник `tpbparty`) |
+| `data/torrents_data_tpbparty.json` | Кеш обогащённых данных по торрентам (источник `tpbparty`) |
 | `torrents.html` | Сгенерированная HTML-страница |
 | `server.py` | HTTP-сервер для просмотра страницы и обновления по кнопке 🔄 |
-| `posters/` | Локально сохранённые постеры IMDB |
+| `data/posters/` | Локально сохранённые постеры IMDB |
 
 ## Источники
 
@@ -54,11 +54,20 @@ python server.py
 # Кнопка 🔄 перезапускает генерацию для текущего источника
 ```
 
+Порт сервера задаётся через переменную окружения `SERVER_PORT`:
+
+```powershell
+$env:SERVER_PORT = "8877"
+python server.py
+```
+
 ## Как это работает (без API-ключей)
 
 1. **IMDB autocomplete API** (`v2.sg.media-imdb.com`) — поиск фильма по названию → IMDB ID (ttXXXXXXX)
 2. **IMDB официальный датасет** (`datasets.imdbws.com/title.ratings.tsv.gz`, ~8MB) — ID → рейтинг + количество голосов
 3. **YouTube search URL** — конструируется из названия фильма
+
+IMDB `ratings` и `basics` скачиваются только если локальный кеш в `data/` не содержит нужные ID. Если удалённый dataset не содержит нужный ID, он сохраняется в кеше как отсутствующий, чтобы не скачивать dataset повторно ради того же ID. При сетевой ошибке используется имеющийся локальный кеш.
 
 ## Язык
 

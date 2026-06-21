@@ -1,4 +1,5 @@
 .venv/
+data/
 *.pyc
 __pycache__/
 imdb_ratings_cache.json

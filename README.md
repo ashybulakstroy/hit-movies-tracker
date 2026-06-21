@@ -61,6 +61,14 @@ python server.py
 # → http://localhost:8765
 ```
 
+Порт сервера можно задать через переменную окружения:
+
+```powershell
+$env:SERVER_PORT = "8877"
+python server.py
+# → http://localhost:8877
+```
+
 **Быстрый запуск:**
 
 ```powershell
@@ -75,25 +83,28 @@ refresh.bat
 1. **Pirate Bay** — парсится HTML страницы `/top/207`
 2. **IMDB ID** — через autocomplete API `v2.sg.media-imdb.com` (поиск по названию с предпочтением результата с постером)
 3. **Рейтинг и жанр** — из официальных датасетов IMDB (`title.ratings.tsv.gz`, `title.basics.tsv.gz`, ~8MB)
-4. **Постер** — скачивается с IMDB, сохраняется локально в `posters/`
+4. **Постер** — скачивается с IMDB, сохраняется локально в `data/posters/`
 5. **Трейлер** — поиск через YouTube, ссылка на прямое видео
 
 ### Оптимизация `--refresh`
 
-При `--refresh` сперва вычисляется SHA256-хеш таблицы фильмов со страницы TPB. Если хеш совпадает с сохранённым (`piratebay_hash.txt`) — вся обработка (IMDB датасеты, поиск, обогащение) пропускается, используется кеш. Принудительно обойти — `--nocache`.
+При `--refresh` сперва вычисляется SHA256-хеш таблицы фильмов со страницы TPB. Если хеш совпадает с сохранённым (`data/piratebay_hash.txt`) — вся обработка (IMDB датасеты, поиск, обогащение) пропускается, используется кеш. Принудительно обойти — `--nocache`.
+
+IMDB ratings/basics скачиваются только если в локальном кеше `data/` нет нужных ID. Если удалённый dataset не содержит нужный ID, он сохраняется в кеше как отсутствующий, чтобы не скачивать dataset повторно ради того же ID. При сетевой ошибке используется имеющийся локальный кеш.
 
 ### Кеши
 
 | Файл | Назначение |
 |------|-----------|
-| `imdb_ratings_cache.json` | Рейтинги IMDB (только нужные ID, ~50-200KB) |
-| `imdb_basics_cache.json` | Жанры IMDB (только нужные ID, ~50-200KB) |
-| `imdb_search_cache.json` | Результаты поиска название→ID + постер + актёры |
-| `youtube_cache.json` | Ссылки на YouTube-трейлеры |
-| `piratebay_page.html` | Слепок страницы Pirate Bay |
-| `piratebay_hash.txt` | SHA256-хеш таблицы фильмов для оптимизации `--refresh` |
-| `torrents_data.json` | Все обогащённые данные по торрентам |
-| `posters/` | Локальные копии постеров |
+| `data/imdb_ratings_cache.json` | Рейтинги IMDB (только нужные ID, ~50-200KB) |
+| `data/imdb_basics_cache.json` | Жанры IMDB (только нужные ID, ~50-200KB) |
+| `data/imdb_search_cache.json` | Результаты поиска название→ID + постер + актёры |
+| `data/youtube_cache.json` | Ссылки на YouTube-трейлеры |
+| `data/piratebay_page.html` | Слепок страницы Pirate Bay |
+| `data/tpbparty_page.html` | Слепок страницы TPB Party |
+| `data/*_hash.txt` | SHA256-хеши таблиц фильмов для оптимизации `--refresh` |
+| `data/torrents_data*.json` | Все обогащённые данные по торрентам |
+| `data/posters/` | Локальные копии постеров |
 
 ## Структура проекта
 
@@ -108,9 +119,8 @@ hit-movies-tracker/
 ├── README.md                     # Документация (русский)
 ├── README-en.md                  # Документация (английский)
 ├── torrents.html                 # Сгенерированная страница (gitignored)
-├── posters/                      # Постеры (gitignored)
-├── *cache.json                   # Файлы кеша (gitignored)
-└── *cache.txt                    # Хеши, прочий кеш (gitignored)
+├── data/                         # Кеши, слепки страниц, постеры (gitignored)
+└── logs/                         # Лог сервера (gitignored)
 ```
 
 ## Disclaimer

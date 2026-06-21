@@ -19,12 +19,13 @@ from bs4 import BeautifulSoup
 
 RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
 BASICS_URL = "https://datasets.imdbws.com/title.basics.tsv.gz"
-RATINGS_CACHE = "imdb_ratings_cache.json"
-BASICS_CACHE = "imdb_basics_cache.json"
-SEARCH_CACHE = "imdb_search_cache.json"
-YOUTUBE_CACHE = "youtube_cache.json"
+DATA_DIR = "data"
+RATINGS_CACHE = os.path.join(DATA_DIR, "imdb_ratings_cache.json")
+BASICS_CACHE = os.path.join(DATA_DIR, "imdb_basics_cache.json")
+SEARCH_CACHE = os.path.join(DATA_DIR, "imdb_search_cache.json")
+YOUTUBE_CACHE = os.path.join(DATA_DIR, "youtube_cache.json")
 OUTPUT_FILE = "torrents.html"
-POSTERS_DIR = "posters"
+POSTERS_DIR = os.path.join(DATA_DIR, "posters")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -36,17 +37,17 @@ SOURCES = {
     'piratebay': {
         'name': 'Pirate Bay',
         'url': 'https://1.piratebays.to/top/207',
-        'page_cache': 'piratebay_page.html',
-        'torrents_cache': 'torrents_data.json',
-        'hash_cache': 'piratebay_hash.txt',
+        'page_cache': os.path.join(DATA_DIR, 'piratebay_page.html'),
+        'torrents_cache': os.path.join(DATA_DIR, 'torrents_data.json'),
+        'hash_cache': os.path.join(DATA_DIR, 'piratebay_hash.txt'),
         'parse': None,
     },
     'tpbparty': {
         'name': 'TPB Party',
         'url': 'https://tpb.party/top/207',
-        'page_cache': 'tpbparty_page.html',
-        'torrents_cache': 'torrents_data_tpbparty.json',
-        'hash_cache': 'tpbparty_hash.txt',
+        'page_cache': os.path.join(DATA_DIR, 'tpbparty_page.html'),
+        'torrents_cache': os.path.join(DATA_DIR, 'torrents_data_tpbparty.json'),
+        'hash_cache': os.path.join(DATA_DIR, 'tpbparty_hash.txt'),
         'parse': None,
     },
 }
@@ -67,6 +68,9 @@ def load_json(path):
 
 
 def save_json(path, data):
+    dir_name = os.path.dirname(path)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -391,13 +395,17 @@ def parse_tpbparty_date(raw):
 
 def load_ratings(needed_ids):
     cached = load_json(RATINGS_CACHE) or {}
-    if cached and needed_ids.issubset(cached.keys()):
+    if not needed_ids:
+        return {}
+    missing_ids = needed_ids - set(cached.keys())
+    if not missing_ids:
+        print("   Использую локальный кеш ratings")
         return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
     try:
-        print("Скачиваю IMDB ratings dataset (~8MB)...")
+        print(f"Скачиваю IMDB ratings dataset (~8MB), нет ID в кеше: {len(missing_ids)}...")
         r = SESSION.get(RATINGS_URL, stream=True, timeout=120)
         r.raise_for_status()
-        keep_ids = set(cached.keys()) | needed_ids
+        keep_ids = missing_ids
         ratings = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -412,9 +420,9 @@ def load_ratings(needed_ids):
         for tid in keep_ids:
             if tid not in ratings:
                 ratings[tid] = None
-        ratings = {**cached, **ratings}
-        save_json(RATINGS_CACHE, ratings)
-        return {k: v for k, v in ratings.items() if k in needed_ids and v is not None}
+        updated = {**cached, **ratings}
+        save_json(RATINGS_CACHE, updated)
+        return {k: v for k, v in updated.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать ratings: {e}")
         if cached:
@@ -424,13 +432,17 @@ def load_ratings(needed_ids):
 
 def load_basics(needed_ids):
     cached = load_json(BASICS_CACHE) or {}
-    if cached and needed_ids.issubset(cached.keys()):
+    if not needed_ids:
+        return {}
+    missing_ids = needed_ids - set(cached.keys())
+    if not missing_ids:
+        print("   Использую локальный кеш basics")
         return {k: v for k, v in cached.items() if k in needed_ids and v is not None}
     try:
-        print("Скачиваю IMDB basics dataset (жанры, ~8MB)...")
+        print(f"Скачиваю IMDB basics dataset (жанры, ~8MB), нет ID в кеше: {len(missing_ids)}...")
         r = SESSION.get(BASICS_URL, stream=True, timeout=120)
         r.raise_for_status()
-        keep_ids = set(cached.keys()) | needed_ids
+        keep_ids = missing_ids
         basics = {}
         buf = io.BytesIO(r.content)
         with gzip.GzipFile(fileobj=buf, mode='rb') as gz:
@@ -446,9 +458,9 @@ def load_basics(needed_ids):
         for tid in keep_ids:
             if tid not in basics:
                 basics[tid] = None
-        basics = {**cached, **basics}
-        save_json(BASICS_CACHE, basics)
-        return {k: v for k, v in basics.items() if k in needed_ids and v is not None}
+        updated = {**cached, **basics}
+        save_json(BASICS_CACHE, updated)
+        return {k: v for k, v in updated.items() if k in needed_ids and v is not None}
     except Exception as e:
         print(f"   Не удалось скачать basics: {e}")
         if cached:
@@ -456,25 +468,42 @@ def load_basics(needed_ids):
         return {}
 
 
-def page_unchanged(html, source_key):
-    cfg = SOURCES[source_key]
+def page_hash(html):
     soup = BeautifulSoup(html, 'html.parser')
     rows = soup.select('#searchResult tbody tr') or soup.select('#searchResult > tr:not(.header)')
+    if not rows:
+        return ''
     content = ''.join(str(r) for r in rows)
-    h = hashlib.sha256(content.encode()).hexdigest()
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
+def page_unchanged(html, source_key):
+    cfg = SOURCES[source_key]
+    h = page_hash(html)
+    if not h:
+        return False
     if os.path.exists(cfg['hash_cache']):
         with open(cfg['hash_cache'], 'r') as f:
             if f.read().strip() == h:
                 return True
+    return False
+
+
+def save_page_hash(html, source_key):
+    cfg = SOURCES[source_key]
+    h = page_hash(html)
+    if not h:
+        return
+    os.makedirs(os.path.dirname(cfg['hash_cache']), exist_ok=True)
     with open(cfg['hash_cache'], 'w') as f:
         f.write(h)
-    return False
 
 
 def load_page(source_key, refresh=False):
     cfg = SOURCES[source_key]
     if refresh or not os.path.exists(cfg['page_cache']):
         html = fetch(cfg['url'])
+        os.makedirs(os.path.dirname(cfg['page_cache']), exist_ok=True)
         with open(cfg['page_cache'], 'w', encoding='utf-8') as f:
             f.write(html)
         return html
@@ -544,7 +573,7 @@ def parse_tpbparty(html):
             continue
         name = name_el.get_text(strip=True)
         href = name_el.get('href', '')
-        detail_url = f'https://tpb.party{href}' if href else ''
+        detail_url = urllib.parse.urljoin('https://tpb.party', href) if href else ''
         uploaded = tds[2].get_text(strip=True) if len(tds) > 2 else ''
         magnet_el = row.select_one('a[href^="magnet:"]')
         magnet = magnet_el['href'] if magnet_el else ''
@@ -848,10 +877,11 @@ r.forEach(function(r){{tb.appendChild(r)}});sd.i=c;sd.d=a;
 document.querySelectorAll('th .ar').forEach(function(e){{e.textContent=''}});document.querySelectorAll('th')[c].querySelector('.ar').textContent=a>0?'▲':'▼';sortTiles()}}
 function td(el){{var r=el.closest('td').querySelector('.dtc');if(!r)return;var on=r.style.display!=='none';r.style.display=on?'none':'';el.textContent=on?'+':'−'}}
 function pt(el){{var u=el.getAttribute('data-yt');if(!u)return;window.open(u,'tr','width=960,height=540,menubar=no,toolbar=no,location=no')}}
-function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});fh();bgf()}}
-function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));document.querySelectorAll('.tile-card[data-title="'+t+'"],tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}});bgf()}}
-function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('tr[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
-function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{document.querySelectorAll('.tile-card[data-title="'+t+'"]').forEach(function(r){{r.style.display='none'}})}})}}
+function hs(t,sel){{[].forEach.call(document.querySelectorAll(sel),function(r){{if((r.getAttribute('data-title')||'')===t)r.style.display='none'}})}}
+function hm(el){{var t=el.closest('tr').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));hs(t,'tr[data-title]');fh();bgf()}}
+function htm(el){{var t=el.closest('.tile-card').getAttribute('data-title');if(!t)return;var h=JSON.parse(localStorage.getItem('ph')||'[]');if(h.indexOf(t)===-1)h.push(t);localStorage.setItem('ph',JSON.stringify(h));hs(t,'.tile-card[data-title],tr[data-title]');bgf()}}
+function fh(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{hs(t,'tr[data-title]')}})}}
+function fht(){{var h=JSON.parse(localStorage.getItem('ph')||'[]');h.forEach(function(t){{hs(t,'.tile-card[data-title]')}})}}
 var sx=/(?:\\bhorror\\b|\\b(?:sex|porn|xxx|erotic|adult|nsfw|onlyfans)\\b)/i;
 (function(){{[].forEach.call(document.querySelectorAll('#tbl tbody tr,.tile-card'),function(r){{var g=r.getAttribute('data-genre')||'',t=r.getAttribute('data-title')||'';if(sx.test(g)||sx.test(t))r.style.display='none'}});fh();fht();bgf();sortTiles();
 var isTile=localStorage.getItem('tv')==='tile';if(isTile){{document.body.classList.add('tile');document.getElementById('tvb').textContent='Вид: список';sortTiles()}}
@@ -886,7 +916,7 @@ def main():
     refresh = args.refresh
     nocache = args.nocache
 
-    if not refresh and os.path.exists(cfg['torrents_cache']):
+    if not refresh and not nocache and os.path.exists(cfg['torrents_cache']):
         print(f"Загружаю кеш торрентов ({source_key})...")
         torrents = load_json(cfg['torrents_cache'])
     else:
@@ -899,6 +929,8 @@ def main():
             print("2. Парсю торренты...")
             fresh = cfg['parse'](html)
             print(f"   Найдено: {len(fresh)} торрентов")
+            if not fresh:
+                raise RuntimeError('Парсер не нашёл торренты; кеш не обновлён')
             fresh = deduplicate(fresh)
             print(f"   После удаления дубликатов: {len(fresh)} торрентов")
             cached = load_json(cfg['torrents_cache']) or []
@@ -959,6 +991,7 @@ def main():
             removed_msg = f", удалено: {removed_count}" if removed_count else ""
             print(f"   Осталось: {len(torrents)} (новых: {len(new_list)}{removed_msg})")
             save_json(cfg['torrents_cache'], torrents)
+            save_page_hash(html, source_key)
     print(f"\n9. Генерирую HTML...")
     output = generate_html(torrents, source_key)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:

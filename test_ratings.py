@@ -6,7 +6,8 @@ import io
 import requests
 
 RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
-CACHE_FILE = "imdb_ratings_cache.json"
+DATA_DIR = "data"
+CACHE_FILE = os.path.join(DATA_DIR, "imdb_ratings_cache.json")
 CACHE_TTL = 86400
 
 
@@ -34,6 +35,7 @@ def get_ratings():
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
     ratings = download_ratings()
+    os.makedirs(DATA_DIR, exist_ok=True)
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(ratings, f)
     return ratings
